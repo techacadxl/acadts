@@ -1,8 +1,8 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
+# =============================
+# Node / Dependencies
+# =============================
+node_modules/
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -10,32 +10,64 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
+# =============================
+# Testing
+# =============================
+coverage/
 
-# next.js
-/.next/
-/out/
+# =============================
+# Next.js build output
+# =============================
+.next/
+out/
+build/
 
-# production
-/build
+# =============================
+# Environment variables
+# NEVER EVER commit these!
+# =============================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# misc
-.DS_Store
+# =============================
+# Firebase sensitive files
+# (IMPORTANT)
+# =============================
 *.pem
+*.p12
+*.key
+*.crt
+serviceAccountKey.json
 
-# debug
+# If you accidentally download Firebase JSON inside project, this will ignore it
+*service-account*.json
+
+# =============================
+# OS / Editor Junk
+# =============================
+.DS_Store
+Thumbs.db
+
+# =============================
+# Logs
+# =============================
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 .pnpm-debug.log*
+lerna-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# =============================
+# Vercel
+# =============================
+.vercel/
 
-# vercel
-.vercel
-
-# typescript
+# =============================
+# TypeScript
+# =============================
 *.tsbuildinfo
 next-env.d.ts
