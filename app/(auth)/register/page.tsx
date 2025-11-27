@@ -6,6 +6,7 @@ import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import { createUserDocument } from "@/lib/db/users";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -103,9 +104,9 @@ export default function RegisterPage() {
 
         <p className="mt-4 text-sm text-center">
           Already have an account?{" "}
-          <a href="/login" className="text-blue-600 underline">
+          <Link href="/login" className="text-blue-600 underline">
             Log in
-          </a>
+          </Link>
         </p>
       </div>
     </main>

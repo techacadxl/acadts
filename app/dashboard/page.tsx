@@ -1,6 +1,7 @@
 // app/dashboard/page.tsx
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { signOut } from "firebase/auth";
@@ -10,15 +11,17 @@ export default function DashboardPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
 
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/login");
+    }
+  }, [user, loading, router]);
+
   if (loading) {
     return <p className="p-4">Checking session...</p>;
   }
 
   if (!user) {
-    // Not logged in → redirect to login
-    if (typeof window !== "undefined") {
-      router.push("/login");
-    }
     return <p className="p-4">Redirecting...</p>;
   }
 

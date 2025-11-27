@@ -4,8 +4,8 @@ import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 
 export const metadata: Metadata = {
-  title: "My App",
-  description: "Next.js + Firebase app",
+  title: "AcadTS",
+  description: "A modern Next.js application with Firebase authentication",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

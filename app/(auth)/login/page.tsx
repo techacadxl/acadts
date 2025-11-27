@@ -5,6 +5,7 @@ import { FormEvent, useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -74,9 +75,9 @@ export default function LoginPage() {
 
         <p className="mt-4 text-sm text-center">
           Don&apos;t have an account?{" "}
-          <a href="/register" className="text-blue-600 underline">
+          <Link href="/register" className="text-blue-600 underline">
             Sign up
-          </a>
+          </Link>
         </p>
       </div>
     </main>
