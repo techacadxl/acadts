@@ -193,7 +193,9 @@ export async function getQuestionById(id: string): Promise<Question | null> {
 
 export interface ListQuestionsParams {
   subject?: string;
+  chapter?: string;
   topic?: string;
+  subtopic?: string;
   difficulty?: DifficultyLevel;
   type?: QuestionType;
 }
@@ -208,12 +210,19 @@ export async function listQuestions(
 
   try {
     const constraints = [];
+    const hasFilters = !!(params.subject || params.chapter || params.topic || params.subtopic || params.difficulty || params.type);
 
     if (params.subject) {
       constraints.push(where("subject", "==", params.subject));
     }
+    if (params.chapter) {
+      constraints.push(where("chapter", "==", params.chapter));
+    }
     if (params.topic) {
       constraints.push(where("topic", "==", params.topic));
+    }
+    if (params.subtopic) {
+      constraints.push(where("subtopic", "==", params.subtopic));
     }
     if (params.difficulty) {
       constraints.push(where("difficulty", "==", params.difficulty));
@@ -222,16 +231,31 @@ export async function listQuestions(
       constraints.push(where("type", "==", params.type));
     }
 
-    // Order by creation date (newest first)
-    const baseConstraints = [orderBy("createdAt", "desc")];
-    const allConstraints = [...baseConstraints, ...constraints];
-    
-    const qRef = query(questionsCollectionRef(), ...allConstraints);
+    // Only use orderBy when there are no filters to avoid composite index requirement
+    // When filters are applied, we'll sort client-side
+    let qRef;
+    if (hasFilters) {
+      // No orderBy when filters are present - sort client-side instead
+      qRef = query(questionsCollectionRef(), ...constraints);
+    } else {
+      // Use orderBy only when no filters (no composite index needed)
+      const baseConstraints = [orderBy("createdAt", "desc")];
+      qRef = query(questionsCollectionRef(), ...baseConstraints);
+    }
 
     const snapshot = await getDocs(qRef);
-    const questions: Question[] = snapshot.docs.map((docSnap) =>
+    let questions: Question[] = snapshot.docs.map((docSnap) =>
       mapQuestionDoc(docSnap)
     );
+
+    // Sort client-side when filters are applied
+    if (hasFilters) {
+      questions = questions.sort((a, b) => {
+        const aTime = a.createdAt?.toMillis() || 0;
+        const bTime = b.createdAt?.toMillis() || 0;
+        return bTime - aTime; // newest first
+      });
+    }
 
     console.log("[Questions DB] listQuestions loaded count:", questions.length);
     return questions;
