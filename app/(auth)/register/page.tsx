@@ -87,65 +87,68 @@ export default function RegisterPage() {
   );
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md border border-gray-200 rounded-lg p-6 shadow-sm bg-white">
-        <h1 className="text-2xl font-semibold mb-4 text-center text-gray-900">
+    <main className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#1a0f0a] via-[#2d1810] to-[#ff6b35] p-4">
+      <div className="w-full max-w-md border-2 border-yellow-400 rounded-lg p-8 shadow-2xl bg-black/40 backdrop-blur-sm">
+        <h1 className="text-3xl font-bold mb-6 text-center text-white">
           Create account
         </h1>
 
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <form onSubmit={handleSubmit} className="space-y-5" noValidate>
           <div>
-            <label htmlFor="name" className="block mb-1 text-sm font-medium text-gray-700">
+            <label htmlFor="name" className="block mb-2 text-sm font-medium text-yellow-300">
               Name
             </label>
             <input
               id="name"
               type="text"
               autoComplete="name"
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+              className="w-full border-2 border-yellow-400/50 bg-black/50 text-white rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition-all placeholder:text-gray-500"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
               minLength={2}
+              placeholder="Enter your name"
               aria-invalid={error ? "true" : "false"}
               aria-describedby={error ? "error-message" : undefined}
             />
           </div>
 
           <div>
-            <label htmlFor="email" className="block mb-1 text-sm font-medium text-gray-700">
+            <label htmlFor="email" className="block mb-2 text-sm font-medium text-yellow-300">
               Email
             </label>
             <input
               id="email"
               type="email"
               autoComplete="email"
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+              className="w-full border-2 border-yellow-400/50 bg-black/50 text-white rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition-all placeholder:text-gray-500"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              placeholder="Enter your email"
               aria-invalid={error ? "true" : "false"}
               aria-describedby={error ? "error-message" : undefined}
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block mb-1 text-sm font-medium text-gray-700">
+            <label htmlFor="password" className="block mb-2 text-sm font-medium text-yellow-300">
               Password
             </label>
             <input
               id="password"
               type="password"
               autoComplete="new-password"
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+              className="w-full border-2 border-yellow-400/50 bg-black/50 text-white rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition-all placeholder:text-gray-500"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               minLength={6}
               required
+              placeholder="Enter your password"
               aria-invalid={error ? "true" : "false"}
               aria-describedby={error ? "error-message" : undefined}
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-yellow-300/70">
               Must be at least 6 characters
             </p>
           </div>
@@ -153,7 +156,7 @@ export default function RegisterPage() {
           {error && (
             <div
               id="error-message"
-              className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2"
+              className="text-sm text-red-300 bg-red-900/50 border-2 border-red-500 rounded-lg p-3"
               role="alert"
             >
               {error}
@@ -163,18 +166,18 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full bg-black hover:bg-gray-900 text-white py-2 rounded text-sm disabled:opacity-60 disabled:cursor-not-allowed transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
+            className="w-full bg-[#ff6b35] hover:bg-yellow-400 text-white py-3 rounded-lg text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-offset-2 focus:ring-offset-black transform hover:scale-105 shadow-lg"
             aria-label={submitting ? "Creating account..." : "Sign up"}
           >
             {submitting ? "Creating account..." : "Sign up"}
           </button>
         </form>
 
-        <p className="mt-4 text-sm text-center text-gray-600">
+        <p className="mt-6 text-sm text-center text-gray-300">
           Already have an account?{" "}
           <Link
             href="/login"
-            className="text-blue-600 hover:text-blue-800 underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
+            className="text-yellow-400 hover:text-yellow-300 underline font-medium focus:outline-none focus:ring-2 focus:ring-yellow-400 rounded transition-colors"
           >
             Log in
           </Link>
