@@ -2,10 +2,53 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { listTestSeries } from "@/lib/db/testSeries";
+import type { TestSeries } from "@/lib/types/testSeries";
+
+// Dummy test series data for home page
+const DUMMY_TEST_SERIES: Record<string, Omit<TestSeries, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>> = {
+  "JEE Ultimate Test Series": {
+    title: "JEE Ultimate Test Series",
+    description: "Comprehensive test series for JEE preparation with 50+ mock tests covering full syllabus. Includes detailed solutions, performance tracking, and 24/7 doubt resolution support.",
+    price: 8499,
+    testIds: [],
+  },
+  "NEET Complete Test Series": {
+    title: "NEET Complete Test Series",
+    description: "Complete NEET preparation package with 40+ high-quality mock tests. Includes video solutions, digital study material, and 1:1 mentorship guidance.",
+    price: 6799,
+    testIds: [],
+  },
+  "CBSE Board Test Series": {
+    title: "CBSE Board Test Series",
+    description: "Complete preparation package for CBSE board exams. Includes 30+ chapter-wise and full syllabus tests, previous year papers with solutions, and sample papers.",
+    price: 4249,
+    testIds: [],
+  },
+  "Foundation Test Series (1-year)": {
+    title: "Foundation Test Series (1-year)",
+    description: "Foundation level test series with 25+ comprehensive tests covering full syllabus. Includes digital material with 15000+ practice questions and detailed video solutions.",
+    price: 5099,
+    testIds: [],
+  },
+  "Foundation Test Series (2-year)": {
+    title: "Foundation Test Series (2-year)",
+    description: "Extended foundation test series with 50+ comprehensive tests. Includes digital material with 30000+ practice questions, complete video solutions library, and 2-year access.",
+    price: 8499,
+    testIds: [],
+  },
+  "Free Practice Test Series": {
+    title: "Free Practice Test Series",
+    description: "Basic test series with 10+ practice tests covering all topics. Includes detailed solutions, performance analytics, and 24/7 access to all tests.",
+    price: 0,
+    testIds: [],
+  },
+};
 
 export default function Home() {
   const router = useRouter();
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [testSeriesList, setTestSeriesList] = useState<TestSeries[]>([]);
 
   const slides = [
     {
@@ -37,6 +80,110 @@ export default function Home() {
     }, 5000);
     return () => clearInterval(timer);
   }, [slides.length]);
+
+  // Load test series for "Know More" buttons
+  useEffect(() => {
+    const loadTestSeries = async () => {
+      try {
+        const series = await listTestSeries();
+        setTestSeriesList(series);
+      } catch (error) {
+        console.error("[HomePage] Error loading test series:", error);
+      }
+    };
+    loadTestSeries();
+  }, []);
+
+  const handleKnowMore = async (title: string) => {
+    console.log("[HomePage] Know More clicked for:", title);
+    console.log("[HomePage] Available test series count:", testSeriesList.length);
+    
+    let seriesToSearch = testSeriesList;
+    
+    // If test series list is empty, load it first
+    if (testSeriesList.length === 0) {
+      console.log("[HomePage] Test series list is empty, loading...");
+      try {
+        const series = await listTestSeries();
+        setTestSeriesList(series);
+        seriesToSearch = series;
+        console.log("[HomePage] Loaded test series:", series.length);
+        console.log("[HomePage] Series titles:", series.map(s => s.title));
+      } catch (error) {
+        console.error("[HomePage] Error loading test series:", error);
+        alert("Unable to load test series. Please try again.");
+        return;
+      }
+    }
+    
+    // Try to find matching test series by title (more flexible matching)
+    const matchingSeries = seriesToSearch.find((series) => {
+      const seriesTitle = series.title.toLowerCase().trim();
+      const searchTitle = title.toLowerCase().trim();
+      
+      console.log("[HomePage] Comparing:", seriesTitle, "with", searchTitle);
+      
+      // Exact match
+      if (seriesTitle === searchTitle) {
+        console.log("[HomePage] Exact match found!");
+        return true;
+      }
+      
+      // Contains match
+      if (seriesTitle.includes(searchTitle) || searchTitle.includes(seriesTitle)) {
+        console.log("[HomePage] Contains match found!");
+        return true;
+      }
+      
+      // Word match (for partial matches like "JEE Ultimate" matching "JEE Ultimate Test Series")
+      const seriesWords = seriesTitle.split(/\s+/);
+      const searchWords = searchTitle.split(/\s+/);
+      const matchingWords = searchWords.filter(word => 
+        seriesWords.some(sw => sw.includes(word) || word.includes(sw))
+      );
+      
+      const isMatch = matchingWords.length >= Math.min(2, searchWords.length);
+      if (isMatch) {
+        console.log("[HomePage] Word match found!");
+      }
+      return isMatch;
+    });
+    
+    if (matchingSeries && matchingSeries.id) {
+      console.log("[HomePage] Found matching series:", matchingSeries.title, "ID:", matchingSeries.id);
+      // Navigate to details page
+      router.push(`/test-series/${matchingSeries.id}`);
+    } else {
+      console.log("[HomePage] No matching series found in database, using dummy data for:", title);
+      
+      // Use dummy data as fallback
+      const dummyData = DUMMY_TEST_SERIES[title];
+      if (dummyData) {
+        // Create a dummy ID based on title
+        const dummyId = title.toLowerCase().replace(/\s+/g, '-').replace(/[()]/g, '');
+        console.log("[HomePage] Using dummy data, navigating to:", `/test-series/${dummyId}`);
+        // Store dummy data in sessionStorage to pass to details page
+        if (typeof window !== 'undefined') {
+          const dummySeries: TestSeries = {
+            id: dummyId,
+            title: dummyData.title,
+            description: dummyData.description,
+            price: dummyData.price,
+            testIds: dummyData.testIds || [],
+            createdAt: { seconds: Date.now() / 1000, nanoseconds: 0 } as any,
+            updatedAt: { seconds: Date.now() / 1000, nanoseconds: 0 } as any,
+            createdBy: 'system',
+          };
+          sessionStorage.setItem(`dummy-series-${dummyId}`, JSON.stringify(dummySeries));
+        }
+        router.push(`/test-series/${dummyId}`);
+      } else {
+        console.log("[HomePage] No dummy data available for:", title);
+        alert(`Test series "${title}" not found. Redirecting to dashboard.`);
+        router.push("/dashboard");
+      }
+    }
+  };
 
   const nextSlide = () => {
     setCurrentSlide((prev) => (prev + 1) % slides.length);
@@ -348,12 +495,18 @@ export default function Home() {
                   >
                     Buy Now
                   </button>
-                  <a
-                    href="#"
-                    className="block text-center text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log("[HomePage] Know More button clicked");
+                      handleKnowMore("JEE Ultimate Test Series");
+                    }}
+                    className="w-full text-center text-blue-600 hover:text-blue-800 text-sm font-medium py-1 cursor-pointer"
                   >
-                    Know More &gt;
-                  </a>
+                    Know More →
+                  </button>
                 </div>
               </div>
             </div>
@@ -413,12 +566,17 @@ export default function Home() {
                   >
                     Buy Now
                   </button>
-                  <a
-                    href="#"
-                    className="block text-center text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleKnowMore("NEET Complete Test Series");
+                    }}
+                    className="w-full text-center text-blue-600 hover:text-blue-800 text-sm font-medium py-1 cursor-pointer"
                   >
-                    Know More &gt;
-                  </a>
+                    Know More →
+                  </button>
                 </div>
               </div>
             </div>
@@ -478,12 +636,17 @@ export default function Home() {
                   >
                     Buy Now
                   </button>
-                  <a
-                    href="#"
-                    className="block text-center text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleKnowMore("CBSE Board Test Series");
+                    }}
+                    className="w-full text-center text-blue-600 hover:text-blue-800 text-sm font-medium py-1 cursor-pointer"
                   >
-                    Know More &gt;
-                  </a>
+                    Know More →
+                  </button>
                 </div>
               </div>
             </div>
@@ -543,12 +706,17 @@ export default function Home() {
                   >
                     Buy Now
                   </button>
-                  <a
-                    href="#"
-                    className="block text-center text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleKnowMore("Foundation Test Series (1-year)");
+                    }}
+                    className="w-full text-center text-blue-600 hover:text-blue-800 text-sm font-medium py-1 cursor-pointer"
                   >
-                    Know More &gt;
-                  </a>
+                    Know More →
+                  </button>
                 </div>
               </div>
             </div>
@@ -608,12 +776,17 @@ export default function Home() {
                   >
                     Buy Now
                   </button>
-                  <a
-                    href="#"
-                    className="block text-center text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleKnowMore("Foundation Test Series (2-year)");
+                    }}
+                    className="w-full text-center text-blue-600 hover:text-blue-800 text-sm font-medium py-1 cursor-pointer"
                   >
-                    Know More &gt;
-                  </a>
+                    Know More →
+                  </button>
                 </div>
               </div>
             </div>
@@ -630,6 +803,7 @@ export default function Home() {
           Explore Our Test Suite
         </button>
       </div>
+
     </div>
   );
 }
