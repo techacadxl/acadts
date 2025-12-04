@@ -324,11 +324,8 @@ export default function NewTestPage() {
                         <th className="text-left px-4 py-2 font-medium text-gray-700">
                           Difficulty
                         </th>
-                        <th className="text-left px-4 py-2 font-medium text-gray-700 w-24">
-                          Marks
-                        </th>
-                        <th className="text-left px-4 py-2 font-medium text-gray-700 w-24">
-                          Penalty
+                        <th className="text-left px-4 py-2 font-medium text-gray-700">
+                          Scoring (Marks / Penalty)
                         </th>
                       </tr>
                     </thead>
@@ -399,32 +396,40 @@ export default function NewTestPage() {
                             </td>
                             <td className="px-4 py-2">
                               {isSelected ? (
-                                <input
-                                  type="number"
-                                  className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-                                  value={scoring?.marks || q.marks}
-                                  onChange={(e) => handleMarksChange(q.id, "marks", e.target.value)}
-                                  min={1}
-                                  step="1"
-                                  required
-                                />
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1">
+                                    <input
+                                      type="number"
+                                      className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                      value={scoring?.marks || q.marks}
+                                      onChange={(e) => handleMarksChange(q.id, "marks", e.target.value)}
+                                      min={1}
+                                      step="1"
+                                      required
+                                    />
+                                  </div>
+                                  <span className="text-xs text-gray-400">/</span>
+                                  <div className="flex-1">
+                                    <input
+                                      type="number"
+                                      className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                      value={scoring?.negativeMarks || q.penalty}
+                                      onChange={(e) => handleMarksChange(q.id, "negativeMarks", e.target.value)}
+                                      min={0}
+                                      step="1"
+                                      required
+                                    />
+                                  </div>
+                                </div>
                               ) : (
-                                <span className="text-gray-600">{q.marks}</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-2">
-                              {isSelected ? (
-                                <input
-                                  type="number"
-                                  className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-                                  value={scoring?.negativeMarks || q.penalty}
-                                  onChange={(e) => handleMarksChange(q.id, "negativeMarks", e.target.value)}
-                                  min={0}
-                                  step="1"
-                                  required
-                                />
-                              ) : (
-                                <span className="text-gray-600">{q.penalty}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-semibold text-green-600">+{q.marks}</span>
+                                  {q.penalty > 0 ? (
+                                    <span className="text-sm font-semibold text-red-600">-{q.penalty}</span>
+                                  ) : (
+                                    <span className="text-xs text-gray-400">(no penalty)</span>
+                                  )}
+                                </div>
                               )}
                             </td>
                           </tr>

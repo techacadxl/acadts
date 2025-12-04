@@ -279,14 +279,14 @@ export default function ViewTestPage() {
                       <div className="ml-4 flex flex-col items-end gap-2">
                         <div className="text-right">
                           <div className="text-xs text-gray-500 mb-1">Scoring</div>
-                          <div className="text-sm font-medium text-gray-900">
-                            +{tq.marks}
+                          <div className="flex items-center gap-2 justify-end">
+                            <span className="text-sm font-semibold text-green-600">+{tq.marks}</span>
+                            {tq.negativeMarks > 0 ? (
+                              <span className="text-sm font-semibold text-red-600">-{tq.negativeMarks}</span>
+                            ) : (
+                              <span className="text-xs text-gray-400">(no penalty)</span>
+                            )}
                           </div>
-                          {tq.negativeMarks > 0 && (
-                            <div className="text-xs text-red-600">
-                              -{tq.negativeMarks}
-                            </div>
-                          )}
                         </div>
                         <button
                           onClick={handleDeleteFromTest}

@@ -494,7 +494,7 @@ export default function AdminQuestionsPage() {
                     Difficulty
                   </th>
                   <th className="text-left px-6 py-3 font-medium text-gray-700 whitespace-nowrap">
-                    Marks
+                    Scoring
                   </th>
                   <th className="text-left px-6 py-3 font-medium text-gray-700 whitespace-nowrap">
                     Actions
@@ -542,7 +542,17 @@ export default function AdminQuestionsPage() {
                           q.difficulty.slice(1)}
                       </span>
                     </td>
-                    <td className="px-6 py-3 text-gray-700 whitespace-nowrap">{q.marks}</td>
+                    <td className="px-6 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-green-600">+{q.marks}</span>
+                        {q.penalty > 0 && (
+                          <span className="text-sm font-semibold text-red-600">-{q.penalty}</span>
+                        )}
+                        {q.penalty === 0 && (
+                          <span className="text-xs text-gray-400">(no penalty)</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-6 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <button

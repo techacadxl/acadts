@@ -297,19 +297,23 @@ export default function ViewQuestionPage() {
             </div>
           )}
 
-          {/* Scoring */}
-          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Marks</p>
-              <p className="text-sm font-medium text-gray-900">
-                {question.marks}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Penalty</p>
-              <p className="text-sm font-medium text-gray-900">
-                {question.penalty > 0 ? `-${question.penalty}` : "None"}
-              </p>
+          {/* Scoring - Marks and Penalty side by side */}
+          <div className="pt-4 border-t border-gray-200">
+            <p className="text-xs text-gray-500 mb-2">Scoring</p>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1">
+                <span className="text-sm font-semibold text-green-600">+{question.marks}</span>
+                <span className="text-xs text-gray-500">marks</span>
+              </div>
+              {question.penalty > 0 && (
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-semibold text-red-600">-{question.penalty}</span>
+                  <span className="text-xs text-gray-500">penalty</span>
+                </div>
+              )}
+              {question.penalty === 0 && (
+                <span className="text-xs text-gray-400 italic">No penalty</span>
+              )}
             </div>
           </div>
 
