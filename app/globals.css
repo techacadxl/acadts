@@ -1,1 +1,97 @@
 @import "tailwindcss";
+
+/* TinyMCE Editor Content Styles */
+.prose {
+  max-width: 100%;
+}
+
+.prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+/* Image alignment classes for viewing */
+.prose .editor-image-left,
+.prose img.editor-image-left {
+  float: left;
+  margin: 10px 20px 10px 0;
+  max-width: 50%;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.prose .editor-image-right,
+.prose img.editor-image-right {
+  float: right;
+  margin: 10px 0 10px 20px;
+  max-width: 50%;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.prose .editor-image-center,
+.prose img.editor-image-center {
+  display: block;
+  margin: 15px auto;
+  max-width: 80%;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.prose .editor-image-inline,
+.prose img.editor-image-inline {
+  display: inline-block;
+  vertical-align: middle;
+  max-width: 200px;
+  height: auto;
+  margin: 0 5px;
+  border-radius: 4px;
+}
+
+.prose .editor-image,
+.prose img.editor-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 15px 0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  display: block;
+}
+
+.prose a {
+  color: #0066cc;
+  text-decoration: underline;
+}
+
+.prose code {
+  background-color: #f4f4f4;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+.prose pre {
+  background-color: #f4f4f4;
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+}
+
+.prose table td,
+.prose table th {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+.prose table th {
+  background-color: #f4f4f4;
+  font-weight: bold;
+}

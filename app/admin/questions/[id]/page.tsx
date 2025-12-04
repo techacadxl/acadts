@@ -1,25 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
 import { getQuestionById } from "@/lib/db/questions";
 import type { Question } from "@/lib/types/question";
 import Link from "next/link";
-
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Image from "@tiptap/extension-image";
-import LinkExtension from "@tiptap/extension-link";
-import Underline from "@tiptap/extension-underline";
-import Subscript from "@tiptap/extension-subscript";
-import Superscript from "@tiptap/extension-superscript";
-import TextAlign from "@tiptap/extension-text-align";
-import { TextStyle } from "@tiptap/extension-text-style";
-import { Color } from "@tiptap/extension-color";
-import Placeholder from "@tiptap/extension-placeholder";
-import { MathExtension } from "@aarkue/tiptap-math-extension";
 
 export default function ViewQuestionPage() {
   const router = useRouter();
@@ -47,87 +34,18 @@ export default function ViewQuestionPage() {
   useEffect(() => {
     setIsMounted(true);
 
+    // Load KaTeX CSS for math rendering
     if (typeof window !== "undefined") {
-      const existing = document.querySelector('link[href*="katex.min.css"]');
-      if (!existing) {
+      const existingLink = document.querySelector('link[href*="katex.min.css"]');
+      if (!existingLink) {
         const link = document.createElement("link");
         link.rel = "stylesheet";
-        link.href =
-          "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css";
+        link.href = "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css";
         link.crossOrigin = "anonymous";
         document.head.appendChild(link);
       }
     }
   }, []);
-
-  const extensions = useMemo(
-    () => [
-      StarterKit.configure({
-        heading: { levels: [1, 2, 3, 4, 5, 6] },
-        codeBlock: {
-          HTMLAttributes: { class: "code-block" },
-        },
-      }),
-      Image.configure({
-        inline: true,
-        allowBase64: true,
-        HTMLAttributes: { class: "editor-image" },
-      }),
-      LinkExtension.configure({
-        openOnClick: true,
-        HTMLAttributes: { class: "editor-link" },
-      }),
-      Underline,
-      Subscript,
-      Superscript,
-      TextAlign.configure({
-        types: ["heading", "paragraph"],
-      }),
-      TextStyle,
-      Color,
-      Placeholder.configure({
-        placeholder: "",
-      }),
-      MathExtension.configure({
-        evaluation: false,
-        addInlineMath: true,
-        renderTextMode: "raw-latex",
-        katexOptions: {
-          throwOnError: false,
-          errorColor: "#cc0000",
-        },
-      }),
-    ],
-    []
-  );
-
-  const questionEditor = useEditor({
-    extensions,
-    content: "",
-    editable: false,
-    immediatelyRender: false,
-    autofocus: false,
-  });
-
-  const explanationEditor = useEditor({
-    extensions,
-    content: "",
-    editable: false,
-    immediatelyRender: false,
-    autofocus: false,
-  });
-
-  useEffect(() => {
-    if (questionEditor && question?.text) {
-      questionEditor.commands.setContent(question.text);
-    }
-  }, [questionEditor, question?.text]);
-
-  useEffect(() => {
-    if (explanationEditor && question?.explanation) {
-      explanationEditor.commands.setContent(question.explanation);
-    }
-  }, [explanationEditor, question?.explanation]);
 
   const fetchQuestion = useCallback(async () => {
     if (!questionId) return;
@@ -192,7 +110,7 @@ export default function ViewQuestionPage() {
     );
   }
 
-  if (loading || !questionEditor) {
+  if (loading) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-gray-50">
         <p className="p-4 text-gray-600">Loading question...</p>
@@ -311,12 +229,13 @@ export default function ViewQuestionPage() {
             </div>
           </div>
 
-          {/* Question Text (TipTap read-only) */}
+          {/* Question Text (HTML content) */}
           <div>
             <p className="text-xs text-gray-500 mb-2">Question</p>
-            <div className="text-sm text-gray-900 bg-gray-50 rounded p-4">
-              <EditorContent editor={questionEditor} />
-            </div>
+            <div 
+              className="text-sm text-gray-900 bg-gray-50 rounded p-4 prose prose-sm max-w-none"
+              dangerouslySetInnerHTML={{ __html: question.text }}
+            />
           </div>
 
           {/* Options (for MCQs) */}
@@ -341,9 +260,10 @@ export default function ViewQuestionPage() {
                         <span className="text-sm font-medium text-gray-600 min-w-[2rem]">
                           {String.fromCharCode(65 + index)}.
                         </span>
-                        <span className="text-sm text-gray-900 flex-1">
-                          {option}
-                        </span>
+                        <span 
+                          className="text-sm text-gray-900 flex-1 prose prose-sm max-w-none"
+                          dangerouslySetInnerHTML={{ __html: option }}
+                        />
                         {isCorrect && (
                           <span className="text-xs font-medium text-green-700">
                             ✓ Correct
@@ -366,13 +286,14 @@ export default function ViewQuestionPage() {
             </div>
           )}
 
-          {/* Explanation (TipTap read-only) */}
-          {question.explanation && explanationEditor && (
+          {/* Explanation (HTML content) */}
+          {question.explanation && (
             <div>
               <p className="text-xs text-gray-500 mb-2">Explanation</p>
-              <div className="text-sm text-gray-700 bg-blue-50 border border-blue-200 rounded p-4">
-                <EditorContent editor={explanationEditor} />
-              </div>
+              <div 
+                className="text-sm text-gray-700 bg-blue-50 border border-blue-200 rounded p-4 prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: question.explanation }}
+              />
             </div>
           )}
 

@@ -693,8 +693,8 @@ export default function EditQuestionPage() {
               <RichTextEditor
                 value={text}
                 onChange={setText}
-                placeholder="Write the question statement here..."
-                minHeight="200px"
+                placeholder="Write the question statement here... You can drag and drop images directly into the editor."
+                minHeight="450px"
                 imageFolder={
                   subjectName && chapterName && topicName && subtopic && type
                     ? buildImageFolderPath(subjectName, chapterName, topicName, subtopic, type)
@@ -773,8 +773,8 @@ export default function EditQuestionPage() {
               <RichTextEditor
                 value={explanation}
                 onChange={setExplanation}
-                placeholder="Explanation, solution steps, or reasoning..."
-                minHeight="150px"
+                placeholder="Explanation, solution steps, or reasoning... You can drag and drop images directly into the editor."
+                minHeight="350px"
                 imageFolder={
                   subjectName && chapterName && topicName && subtopic && type
                     ? buildImageFolderPath(subjectName, chapterName, topicName, subtopic, type)
