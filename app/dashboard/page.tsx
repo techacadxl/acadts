@@ -31,6 +31,10 @@ export default function DashboardPage() {
     if (!user) return;
     console.log("[DashboardPage] Logout initiated:", user.uid);
     try {
+      // Clear login time
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("user_login_time");
+      }
       await signOut(auth);
       console.log("[DashboardPage] Sign out successful, redirecting");
       router.replace("/login");

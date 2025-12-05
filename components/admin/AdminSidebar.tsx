@@ -16,6 +16,10 @@ export default function AdminSidebar({ onNavigate }: AdminSidebarProps) {
   const handleLogout = useCallback(async () => {
     console.log("[AdminSidebar] Logout initiated");
     try {
+      // Clear login time
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("user_login_time");
+      }
       await signOut(auth);
       console.log("[AdminSidebar] Sign out successful, redirecting");
       router.replace("/login");

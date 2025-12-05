@@ -1,20 +1,37 @@
 // app/(auth)/login/page.tsx
 "use client";
 
-import { FormEvent, useState, useCallback } from "react";
+import { FormEvent, useState, useCallback, useEffect } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
+import { useUserProfile } from "@/lib/hooks/useUserProfile";
 import Link from "next/link";
 import { getAuthErrorMessage } from "@/lib/utils/errors";
 import { isValidEmail } from "@/lib/utils/validation";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+  const { role, loading: profileLoading } = useUserProfile();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (authLoading || profileLoading) return;
+    
+    if (user) {
+      if (role === "admin") {
+        router.replace("/admin");
+      } else {
+        router.replace("/dashboard");
+      }
+    }
+  }, [user, role, authLoading, profileLoading, router]);
 
   const handleSubmit = useCallback(
     async (e: FormEvent<HTMLFormElement>) => {
@@ -46,8 +63,26 @@ export default function LoginPage() {
           userId: userCredential.user.uid,
           email: userCredential.user.email,
         });
-        console.log("[LoginPage] Redirecting to dashboard");
-        router.push("/dashboard");
+        
+        // Set login time for 90-day session expiration
+        if (typeof window !== "undefined") {
+          localStorage.setItem("user_login_time", Date.now().toString());
+        }
+        
+        // Get user role to redirect appropriately
+        // We need to fetch the role from Firestore
+        const { doc, getDoc } = await import("firebase/firestore");
+        const { db } = await import("@/lib/firebase/client");
+        const userRef = doc(db, "users", userCredential.user.uid);
+        const userSnap = await getDoc(userRef);
+        const userRole = userSnap.exists() ? (userSnap.data()?.role || "student") : "student";
+        
+        console.log("[LoginPage] User role:", userRole);
+        if (userRole === "admin") {
+          router.push("/admin");
+        } else {
+          router.push("/dashboard");
+        }
       } catch (err) {
         console.error("[LoginPage] Login error:", err);
         const errorMessage = getAuthErrorMessage(err);
@@ -60,6 +95,24 @@ export default function LoginPage() {
     },
     [email, password, router]
   );
+
+  // Show loading state while checking auth
+  if (authLoading || profileLoading) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-white p-4">
+        <p className="text-gray-600">Checking session...</p>
+      </main>
+    );
+  }
+
+  // If already logged in, show redirect message (they'll be redirected by useEffect)
+  if (user) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-white p-4">
+        <p className="text-gray-600">You are already logged in. Redirecting...</p>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-white p-4">

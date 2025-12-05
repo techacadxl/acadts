@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
+import { useUserProfile } from "@/lib/hooks/useUserProfile";
 import { listTestSeries } from "@/lib/db/testSeries";
 import type { TestSeries } from "@/lib/types/testSeries";
 
@@ -47,6 +49,8 @@ const DUMMY_TEST_SERIES: Record<string, Omit<TestSeries, 'id' | 'createdAt' | 'u
 
 export default function Home() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+  const { role, loading: profileLoading } = useUserProfile();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [testSeriesList, setTestSeriesList] = useState<TestSeries[]>([]);
 
@@ -73,6 +77,19 @@ export default function Home() {
       image: "🚀"
     }
   ];
+
+  // Redirect logged-in users to their appropriate dashboard
+  useEffect(() => {
+    if (authLoading || profileLoading) return;
+    
+    if (user) {
+      if (role === "admin") {
+        router.replace("/admin");
+      } else {
+        router.replace("/dashboard");
+      }
+    }
+  }, [user, role, authLoading, profileLoading, router]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -193,6 +210,25 @@ export default function Home() {
     setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
   };
 
+  // Show loading state while checking auth
+  if (authLoading || profileLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#1a0f0a] via-[#2d1810] to-[#ff6b35]">
+        <p className="text-white text-lg">Loading...</p>
+      </div>
+    );
+  }
+
+  // If user is logged in, show redirect message (they'll be redirected by useEffect)
+  if (user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#1a0f0a] via-[#2d1810] to-[#ff6b35]">
+        <p className="text-white text-lg">Redirecting to your dashboard...</p>
+      </div>
+    );
+  }
+
+  // Show landing page for non-logged-in users
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#1a0f0a] via-[#2d1810] to-[#ff6b35]">
       {/* Navbar */}

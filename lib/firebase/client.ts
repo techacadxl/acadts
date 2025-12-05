@@ -1,6 +1,6 @@
 // src/lib/firebase/client.ts
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
-import { getAuth, Auth } from "firebase/auth";
+import { getAuth, Auth, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getFirestore, Firestore } from "firebase/firestore";
 import { getStorage, FirebaseStorage } from "firebase/storage";
 
@@ -51,6 +51,14 @@ if (!existingApps.length) {
 
 export const firebaseApp: FirebaseApp = app;
 export const auth: Auth = getAuth(app);
+
+// Set persistence to LOCAL (persists until explicitly signed out)
+// Firebase Auth tokens are automatically refreshed, and we'll handle 90-day expiration
+// by checking token expiration in the auth state listener
+setPersistence(auth, browserLocalPersistence).catch((error) => {
+  console.error("[Firebase Client] Error setting persistence:", error);
+});
+
 export const db: Firestore = getFirestore(app);
 export const storage: FirebaseStorage = getStorage(app);
 console.log("[Firebase Client] Firebase services initialized (auth, firestore, storage)");

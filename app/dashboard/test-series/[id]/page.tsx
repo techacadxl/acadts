@@ -90,6 +90,10 @@ export default function TestSeriesDetailsPage() {
   const handleLogout = useCallback(async () => {
     if (!user) return;
     try {
+      // Clear login time
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("user_login_time");
+      }
       await signOut(auth);
       router.replace("/login");
     } catch (err) {
