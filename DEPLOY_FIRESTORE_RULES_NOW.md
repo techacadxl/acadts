@@ -56,3 +56,4 @@ firebase deploy --only firestore:rules
 **Important**: The rules file is updated in your code, but Firebase is still using the old rules. You MUST deploy them to Firebase Console for the fix to work!
 
 
+

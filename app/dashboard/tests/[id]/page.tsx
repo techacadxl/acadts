@@ -37,6 +37,7 @@ export default function TestTakingPage() {
   const [answers, setAnswers] = useState<Map<number, number | number[] | string>>(new Map());
   const [markedForReview, setMarkedForReview] = useState<Set<number>>(new Set());
   const [remainingTime, setRemainingTime] = useState<number>(0);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize timer
@@ -264,6 +265,8 @@ export default function TestTakingPage() {
       if (status === "not_visited") {
         updateQuestionStatus(index, "not_answered");
       }
+      // Close sidebar on mobile after selecting a question
+      setIsSidebarOpen(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }, [questions.length, getQuestionStatus, updateQuestionStatus]);
@@ -387,25 +390,14 @@ export default function TestTakingPage() {
               <h1 className="text-base font-semibold text-gray-900">{test.title}</h1>
             </div>
 
-            {/* Right: Timer, Full Screen, and Action Buttons */}
+            {/* Right: Timer and Action Buttons */}
             <div className="flex flex-col items-end gap-2">
-              {/* Timer and Full Screen */}
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">Remaining Time:</span>
-                  <span className={`text-base font-bold ${remainingTime < 300 ? "text-red-600" : "text-green-600"}`}>
-                    {formatTime(remainingTime)}
-                  </span>
-                </div>
-                <button
-                  onClick={() => {}}
-                  className="p-1 hover:bg-gray-100 rounded transition-colors"
-                  title="Toggle Full Screen"
-                >
-                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                  </svg>
-                </button>
+              {/* Timer */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Remaining Time:</span>
+                <span className={`text-base font-bold ${remainingTime < 300 ? "text-red-600" : "text-green-600"}`}>
+                  {formatTime(remainingTime)}
+                </span>
               </div>
               
               {/* Action Buttons - Below Timer */}
@@ -416,14 +408,21 @@ export default function TestTakingPage() {
                 <button className="text-sm text-gray-700 hover:text-gray-900 px-3 py-1 hover:bg-gray-100 rounded transition-colors">
                   Question Paper
                 </button>
-                <button className="text-sm text-gray-700 hover:text-gray-900 px-3 py-1 hover:bg-gray-100 rounded transition-colors">
-                  Calculator
+                <button
+                  onClick={() => {
+                    if (window.confirm("Are you sure you want to end the test? Your progress will be saved.")) {
+                      router.push("/dashboard");
+                    }
+                  }}
+                  className="text-sm text-gray-700 hover:text-gray-900 px-3 py-1 hover:bg-gray-100 rounded transition-colors"
+                >
+                  End Test
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Second Row: Subject Tabs and Close Button */}
+          {/* Second Row: Subject Tabs and Mobile Menu Button */}
           <div className="flex items-center justify-between border-t border-gray-200">
             {/* Subject Tabs */}
             {test.sections && test.sections.length > 0 && (
@@ -449,14 +448,22 @@ export default function TestTakingPage() {
               </div>
             )}
             
-            {/* Close Button */}
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors mr-2"
-              title="Close Test"
-            >
-              <span className="text-gray-700 font-bold">×</span>
-            </button>
+            {/* Mobile Menu Button - Only visible on small screens */}
+            <div className="lg:hidden">
+              <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="w-8 h-8 bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors mr-2"
+                aria-label="Toggle Question Palette"
+              >
+                <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {isSidebarOpen ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  )}
+                </svg>
+              </button>
+            </div>
           </div>
 
         </div>
@@ -590,7 +597,8 @@ export default function TestTakingPage() {
           </div>
 
           {/* Sidebar - Question Status & Palette (Right - 1/3 width) */}
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 hidden lg:block">
+            {/* Desktop Sidebar Content */}
             <div className="bg-white p-3 sticky top-32">
               {/* Status Legend */}
               <div className="mb-3 pb-3 border-b border-gray-200">
@@ -670,6 +678,110 @@ export default function TestTakingPage() {
           </div>
         </div>
       </div>
+
+      {/* Mobile Sidebar - Fixed Overlay */}
+      {isSidebarOpen && (
+        <>
+          {/* Overlay */}
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+          ></div>
+          
+          {/* Sidebar Panel */}
+          <div className="fixed right-0 top-0 h-full w-80 max-w-[85vw] bg-white shadow-2xl z-50 overflow-y-auto lg:hidden">
+            <div className="p-3">
+              {/* Close Button */}
+              <div className="flex justify-end mb-3 pb-3 border-b border-gray-200">
+                <button
+                  onClick={() => setIsSidebarOpen(false)}
+                  className="p-2 hover:bg-gray-100 transition-colors"
+                  aria-label="Close"
+                >
+                  <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Status Legend */}
+              <div className="mb-3 pb-3 border-b border-gray-200">
+                <div className="space-y-1.5 text-[10px]">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded bg-green-500"></div>
+                    <span className="text-gray-700">{statusCounts.answered} Answered</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded bg-red-500"></div>
+                    <span className="text-gray-700">{statusCounts.not_answered} Not Answered</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded bg-gray-300"></div>
+                    <span className="text-gray-700">{statusCounts.not_visited} Not Visited</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded bg-purple-500"></div>
+                    <span className="text-gray-700">{statusCounts.marked_for_review} Marked for Review</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded bg-purple-500 relative">
+                      <div className="absolute top-0.5 left-0.5 w-1.5 h-1.5 rounded-full bg-green-500"></div>
+                    </div>
+                    <span className="text-gray-700">{statusCounts.answered_and_marked} Answered & Marked for Review (will be considered for evaluation)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Question Palette */}
+              <div className="mb-3">
+                <h3 className="text-xs font-semibold text-gray-900 mb-2">Choose a Question</h3>
+                <div className="grid grid-cols-5 gap-1.5 max-h-96 overflow-y-auto">
+                  {questions.map((q, index) => {
+                    const status = getQuestionStatus(index);
+                    const isCurrent = index === currentQuestionIndex;
+                    
+                    return (
+                      <button
+                        key={index}
+                        onClick={() => handleGoToQuestion(index)}
+                        className={`aspect-square text-xs font-medium transition-all relative flex items-center justify-center ${
+                          isCurrent
+                            ? "ring-2 ring-blue-500"
+                            : ""
+                        } ${getStatusColor(status)} ${
+                          status === "answered" || status === "answered_and_marked"
+                            ? "text-white"
+                            : "text-gray-700"
+                        }`}
+                        title={`Question ${index + 1}`}
+                      >
+                        {index + 1}
+                        {status === "answered_and_marked" && (
+                          <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-green-500"></div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-2 pt-3 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    if (window.confirm("Are you sure you want to submit the test? This action cannot be undone.")) {
+                      router.push("/dashboard");
+                    }
+                  }}
+                  className="w-full px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-all"
+                >
+                  Submit
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </main>
   );
 }
