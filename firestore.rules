@@ -70,6 +70,24 @@ service cloud.firestore {
               );
             }
 
+            // TestResults collection - students can create and read their own results, admins can read all
+            match /testResults/{resultId} {
+              // Allow reading if the result belongs to the user or user is admin
+              allow get: if isAuthenticated() && (
+                resource.data.userId == request.auth.uid || 
+                isAdmin()
+              );
+              // Allow listing/querying - queries filter by userId or testId so this is safe
+              allow list: if isAuthenticated();
+              // Allow creating test results for the authenticated user
+              allow create: if isAuthenticated() && 
+                request.resource.data.userId == request.auth.uid;
+              // Don't allow updates - test results are final once submitted
+              allow update: if false;
+              // Allow admins to delete results for management purposes
+              allow delete: if isAdmin();
+            }
+
             // Default deny all other collections
     match /{document=**} {
       allow read, write: if false;

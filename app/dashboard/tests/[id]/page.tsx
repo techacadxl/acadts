@@ -7,9 +7,12 @@ import { useUserProfile } from "@/lib/hooks/useUserProfile";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { getTestById } from "@/lib/db/tests";
 import { getQuestionById } from "@/lib/db/questions";
+import { createTestResult } from "@/lib/db/testResults";
+import { processAnswers } from "@/lib/utils/answerChecker";
 import type { Test } from "@/lib/types/test";
 import type { Question } from "@/lib/types/question";
 import type { TestQuestion } from "@/lib/types/test";
+import { Timestamp } from "firebase/firestore";
 
 interface QuestionWithTestData extends Question {
   testMarks: number;
@@ -38,33 +41,10 @@ export default function TestTakingPage() {
   const [markedForReview, setMarkedForReview] = useState<Set<number>>(new Set());
   const [remainingTime, setRemainingTime] = useState<number>(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Initialize timer
-  useEffect(() => {
-    if (test && test.durationMinutes) {
-      const totalSeconds = test.durationMinutes * 60;
-      setRemainingTime(totalSeconds);
-
-      timerIntervalRef.current = setInterval(() => {
-        setRemainingTime((prev) => {
-          if (prev <= 1) {
-            if (timerIntervalRef.current) {
-              clearInterval(timerIntervalRef.current);
-            }
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-
-      return () => {
-        if (timerIntervalRef.current) {
-          clearInterval(timerIntervalRef.current);
-        }
-      };
-    }
-  }, [test]);
+  const startTimeRef = useRef<Date | null>(null);
+  const handleSubmitTestRef = useRef<((skipConfirm?: boolean) => Promise<void>) | null>(null);
 
   // Load test and questions
   useEffect(() => {
@@ -131,6 +111,9 @@ export default function TestTakingPage() {
 
         setQuestions(validQuestions);
         setCurrentQuestionIndex(0);
+        
+        // Record start time
+        startTimeRef.current = new Date();
         
         const initialStatuses = new Map<number, QuestionStatus>();
         validQuestions.forEach((_, index) => {
@@ -296,6 +279,103 @@ export default function TestTakingPage() {
     const secs = seconds % 60;
     return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   }, []);
+
+  // Handle test submission
+  const handleSubmitTest = useCallback(async (skipConfirm: boolean = false) => {
+    if (!test || !user || questions.length === 0) return;
+    
+    if (!skipConfirm) {
+      const confirmed = window.confirm(
+        "Are you sure you want to submit the test? This action cannot be undone."
+      );
+      if (!confirmed) return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      // Calculate time spent
+      const timeSpentSeconds = startTimeRef.current
+        ? Math.floor((new Date().getTime() - startTimeRef.current.getTime()) / 1000)
+        : test.durationMinutes * 60;
+
+      // Process all answers
+      const responses = processAnswers(questions, answers);
+
+      // Calculate statistics
+      const totalQuestions = questions.length;
+      const answeredQuestions = responses.filter((r) => r.studentAnswer !== null).length;
+      const correctAnswers = responses.filter((r) => r.isCorrect).length;
+      const incorrectAnswers = responses.filter((r) => r.studentAnswer !== null && !r.isCorrect).length;
+      const notAnswered = totalQuestions - answeredQuestions;
+      const totalMarksObtained = responses.reduce((sum, r) => sum + r.marksObtained, 0);
+      const totalMarksPossible = questions.reduce((sum, q) => sum + q.testMarks, 0);
+
+      // Create test result
+      const resultInput = {
+        testId: test.id,
+        userId: user.uid,
+        userName: user.displayName || undefined,
+        userEmail: user.email || undefined,
+        responses,
+        totalQuestions,
+        answeredQuestions,
+        correctAnswers,
+        incorrectAnswers,
+        notAnswered,
+        totalMarksObtained,
+        totalMarksPossible,
+        testTitle: test.title,
+        testDurationMinutes: test.durationMinutes,
+        timeSpentSeconds,
+        startedAt: startTimeRef.current ? Timestamp.fromDate(startTimeRef.current) : undefined,
+      };
+
+      const resultId = await createTestResult(resultInput);
+
+      // Navigate to results page
+      router.push(`/dashboard/tests/${testId}/result/${resultId}`);
+    } catch (error) {
+      console.error("[TestTakingPage] Error submitting test:", error);
+      alert("Failed to submit test. Please try again.");
+      setIsSubmitting(false);
+    }
+  }, [test, user, questions, answers, testId, router]);
+
+  // Store submit function in ref for timer
+  useEffect(() => {
+    handleSubmitTestRef.current = handleSubmitTest;
+  }, [handleSubmitTest]);
+
+  // Initialize timer
+  useEffect(() => {
+    if (test && test.durationMinutes) {
+      const totalSeconds = test.durationMinutes * 60;
+      setRemainingTime(totalSeconds);
+
+      timerIntervalRef.current = setInterval(() => {
+        setRemainingTime((prev) => {
+          if (prev <= 1) {
+            if (timerIntervalRef.current) {
+              clearInterval(timerIntervalRef.current);
+            }
+            // Auto-submit when time runs out (skip confirmation)
+            if (handleSubmitTestRef.current) {
+              handleSubmitTestRef.current(true);
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => {
+        if (timerIntervalRef.current) {
+          clearInterval(timerIntervalRef.current);
+        }
+      };
+    }
+  }, [test]);
 
   // Get status counts
   const statusCounts = useMemo(() => {
@@ -796,14 +876,11 @@ export default function TestTakingPage() {
             {/* Right side - Submit Button (1/3 width on desktop, full width on mobile) */}
             <div className="lg:col-span-1 min-w-0">
               <button
-                onClick={() => {
-                  if (window.confirm("Are you sure you want to submit the test? This action cannot be undone.")) {
-                    router.push("/dashboard");
-                  }
-                }}
-                className="w-full px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-all"
+                onClick={handleSubmitTest}
+                disabled={isSubmitting}
+                className="w-full px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white text-sm font-medium transition-all"
               >
-                Submit
+                {isSubmitting ? "Submitting..." : "Submit"}
               </button>
             </div>
           </div>
