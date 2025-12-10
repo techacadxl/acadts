@@ -167,3 +167,43 @@ export async function getAvailableTestSeries(): Promise<TestSeries[]> {
   return listTestSeries();
 }
 
+/**
+ * Get all enrollments for a specific test series
+ */
+export async function getTestSeriesEnrollments(
+  testSeriesId: string
+): Promise<Enrollment[]> {
+  console.log("[Students DB] getTestSeriesEnrollments called:", testSeriesId);
+
+  if (!testSeriesId) {
+    console.error("[Students DB] testSeriesId is required");
+    return [];
+  }
+
+  try {
+    const q = query(
+      collection(db, ENROLLMENTS_COLLECTION),
+      where("testSeriesId", "==", testSeriesId),
+      where("status", "==", "active")
+    );
+    const snapshot = await getDocs(q);
+    
+    const enrollments: Enrollment[] = snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        userId: data.userId,
+        testSeriesId: data.testSeriesId,
+        enrolledAt: data.enrolledAt,
+        status: data.status,
+      } as Enrollment;
+    });
+
+    console.log("[Students DB] Test series enrollments loaded:", enrollments.length);
+    return enrollments;
+  } catch (error) {
+    console.error("[Students DB] Error getting test series enrollments:", error);
+    return [];
+  }
+}
+

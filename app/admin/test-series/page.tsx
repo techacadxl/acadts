@@ -118,19 +118,22 @@ export default function AdminTestSeriesPage() {
   );
 
   const handleMenuClick = useCallback(
-    (id: string, action: "view" | "edit" | "delete") => {
+    (id: string, action: "view" | "edit" | "delete" | "students") => {
       if (action === "view") {
         handleView(id);
       } else if (action === "edit") {
         handleEdit(id);
       } else if (action === "delete") {
         handleDelete(id);
+      } else if (action === "students") {
+        router.push(`/admin/test-series/${id}/students`);
       }
       setOpenMenuId(null);
       setMenuPosition(null);
     },
-    [handleView, handleEdit, handleDelete]
+    [handleView, handleEdit, handleDelete, router]
   );
+
 
   const handleToggleMenu = useCallback((e: React.MouseEvent<HTMLButtonElement>, id: string) => {
     e.stopPropagation();
@@ -328,6 +331,12 @@ export default function AdminTestSeriesPage() {
               Edit
             </button>
             <button
+              onClick={() => handleMenuClick(openMenuId, "students")}
+              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors"
+            >
+              View Enrolled Students
+            </button>
+            <button
               onClick={() => handleMenuClick(openMenuId, "delete")}
               disabled={deletingId === openMenuId}
               className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer transition-colors"
@@ -337,6 +346,7 @@ export default function AdminTestSeriesPage() {
           </div>
         </div>
       )}
+
     </div>
   );
 }

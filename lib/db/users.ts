@@ -1,6 +1,6 @@
 // lib/db/users.ts
 import { db } from "@/lib/firebase/client";
-import { doc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 
 export type UserRole = "student" | "admin";
 
@@ -63,5 +63,76 @@ export async function createUserDocument(
         : new Error("Failed to create/update user document in Firestore");
     console.error("[Users DB] Error creating user document:", dbError);
     throw dbError;
+  }
+}
+
+/**
+ * Get user document from Firestore by UID
+ * @param uid - User UID
+ * @returns User document or null if not found
+ */
+export async function getUserDocument(uid: string): Promise<AppUser | null> {
+  console.log("[Users DB] getUserDocument called with:", uid);
+
+  if (!uid || typeof uid !== "string" || uid.trim() === "") {
+    console.error("[Users DB] Invalid UID provided");
+    return null;
+  }
+
+  try {
+    const userRef = doc(db, "users", uid);
+    const userSnap = await getDoc(userRef);
+
+    if (!userSnap.exists()) {
+      console.warn("[Users DB] User document not found for UID:", uid);
+      return null;
+    }
+
+    const data = userSnap.data();
+    return {
+      uid: userSnap.id,
+      email: data.email ?? null,
+      displayName: data.displayName ?? null,
+      role: data.role ?? "student",
+      createdAt: data.createdAt ?? null,
+    };
+  } catch (error) {
+    console.error("[Users DB] Error getting user document:", error);
+    return null;
+  }
+}
+
+/**
+ * Get multiple user documents by UIDs
+ * @param uids - Array of user UIDs
+ * @returns Map of UID to AppUser
+ */
+export async function getUserDocuments(
+  uids: string[]
+): Promise<Map<string, AppUser>> {
+  console.log("[Users DB] getUserDocuments called with:", uids.length, "UIDs");
+
+  const userMap = new Map<string, AppUser>();
+
+  if (!uids || uids.length === 0) {
+    return userMap;
+  }
+
+  try {
+    // Fetch all user documents in parallel
+    const userPromises = uids.map((uid) => getUserDocument(uid));
+    const users = await Promise.all(userPromises);
+
+    users.forEach((user) => {
+      if (user) {
+        userMap.set(user.uid, user);
+      }
+    });
+
+    console.log("[Users DB] User documents loaded:", userMap.size);
+    return userMap;
+  } catch (error) {
+    console.error("[Users DB] Error getting user documents:", error);
+    return userMap;
   }
 }
