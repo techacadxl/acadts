@@ -1,6 +1,6 @@
 // lib/db/users.ts
 import { db } from "@/lib/firebase/client";
-import { doc, setDoc, getDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, getDocs, collection, query, where, serverTimestamp, Timestamp } from "firebase/firestore";
 
 export type UserRole = "student" | "admin";
 
@@ -134,5 +134,36 @@ export async function getUserDocuments(
   } catch (error) {
     console.error("[Users DB] Error getting user documents:", error);
     return userMap;
+  }
+}
+
+/**
+ * Get all students (users with role "student")
+ * @returns Array of student users
+ */
+export async function getAllStudents(): Promise<AppUser[]> {
+  console.log("[Users DB] getAllStudents called");
+
+  try {
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("role", "==", "student"));
+    const snapshot = await getDocs(q);
+
+    const students: AppUser[] = snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return {
+        uid: docSnap.id,
+        email: data.email ?? null,
+        displayName: data.displayName ?? null,
+        role: data.role ?? "student",
+        createdAt: data.createdAt ?? null,
+      };
+    });
+
+    console.log("[Users DB] All students loaded:", students.length);
+    return students;
+  } catch (error) {
+    console.error("[Users DB] Error getting all students:", error);
+    return [];
   }
 }

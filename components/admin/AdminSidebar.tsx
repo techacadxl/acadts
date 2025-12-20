@@ -37,6 +37,7 @@ export default function AdminSidebar({ onNavigate }: AdminSidebarProps) {
 
   const navItems = [
     { path: "/admin", label: "Dashboard", icon: "📊" },
+    { path: "/admin/students", label: "All Students", icon: "👥" },
     { path: "/admin/test-series", label: "Test Series", icon: "📚" },
     { path: "/admin/tests", label: "Tests", icon: "📝" },
     { path: "/admin/questions", label: "Questions", icon: "❓" },
