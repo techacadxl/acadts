@@ -9,10 +9,13 @@ import { getUserDocument } from "@/lib/db/users";
 import { getUserTestResults } from "@/lib/db/testResults";
 import { getTestById } from "@/lib/db/tests";
 import { getQuestionById } from "@/lib/db/questions";
+import { analyzeTestResults } from "@/lib/utils/studentAnalysis";
+import StudentAnalysisReport from "@/components/admin/StudentAnalysisReport";
 import type { AppUser } from "@/lib/db/users";
 import type { TestResult } from "@/lib/types/testResult";
 import type { Test } from "@/lib/types/test";
 import type { Question } from "@/lib/types/question";
+import type { AnalysisData } from "@/lib/utils/studentAnalysis";
 
 interface TestResultWithDetails extends TestResult {
   test?: Test | null;
@@ -30,6 +33,36 @@ export default function StudentActivityPage() {
   const [studentActivity, setStudentActivity] = useState<TestResultWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [overallAnalysis, setOverallAnalysis] = useState<AnalysisData | null>(null);
+  const [testAnalysisMap, setTestAnalysisMap] = useState<Map<string, AnalysisData>>(new Map());
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+  const [expandedTestId, setExpandedTestId] = useState<string | null>(null);
+  const [showOverallAnalysis, setShowOverallAnalysis] = useState(false);
+
+  const loadTestAnalysis = useCallback(async (testResult: TestResult) => {
+    // Check if already loaded
+    if (testAnalysisMap.has(testResult.testId)) {
+      return;
+    }
+
+    setLoadingAnalysis(true);
+    try {
+      const testData = await analyzeTestResults(
+        [testResult],
+        getQuestionById,
+        getTestById
+      );
+      setTestAnalysisMap((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(testResult.testId, testData);
+        return newMap;
+      });
+    } catch (error) {
+      console.error(`[StudentActivityPage] Error loading test analysis for ${testResult.testId}:`, error);
+    } finally {
+      setLoadingAnalysis(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (authLoading || profileLoading || !userId) return;
@@ -132,11 +165,33 @@ export default function StudentActivityPage() {
         );
         
         setStudentActivity(resultsWithDetails);
+
+        // Load overall analysis data (all tests combined)
+        await loadOverallAnalysis(results);
       } catch (error) {
         console.error("[StudentActivityPage] Error loading data:", error);
         setError("Failed to load student activity. Please try again.");
       } finally {
         setLoading(false);
+      }
+    };
+
+    const loadOverallAnalysis = async (testResults: TestResult[]) => {
+      if (testResults.length === 0) return;
+
+      setLoadingAnalysis(true);
+      try {
+        // Load overall analysis (all tests combined)
+        const overallData = await analyzeTestResults(
+          testResults,
+          getQuestionById,
+          getTestById
+        );
+        setOverallAnalysis(overallData);
+      } catch (error) {
+        console.error("[StudentActivityPage] Error loading overall analysis:", error);
+      } finally {
+        setLoadingAnalysis(false);
       }
     };
 
@@ -208,26 +263,63 @@ export default function StudentActivityPage() {
             </button>
             <div className="flex-1">
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Student Activity Report</h1>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span className="text-blue-600 font-semibold text-sm">
-                      {(studentUser.displayName || "U")[0].toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-base font-semibold text-gray-900">
-                      {studentUser.displayName || "Unknown Student"}
-                    </p>
-                    {studentUser.email && (
-                      <p className="text-sm text-gray-500">{studentUser.email}</p>
-                    )}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                      <span className="text-blue-600 font-semibold text-sm">
+                        {(studentUser.displayName || "U")[0].toUpperCase()}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-base font-semibold text-gray-900">
+                        {studentUser.displayName || "Unknown Student"}
+                      </p>
+                      {studentUser.email && (
+                        <p className="text-sm text-gray-500">{studentUser.email}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
+                {studentActivity.length > 0 && overallAnalysis && (
+                  <button
+                    onClick={() => setShowOverallAnalysis(!showOverallAnalysis)}
+                    className="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2 border border-blue-200"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLineJoin="round"
+                        strokeWidth={2}
+                        d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      />
+                    </svg>
+                    {showOverallAnalysis ? "Hide" : "Combined Report"}
+                  </button>
+                )}
               </div>
             </div>
           </div>
         </div>
+
+        {/* Overall Analysis Section */}
+        {studentActivity.length > 0 && overallAnalysis && showOverallAnalysis && (
+          <div className="mb-8">
+            {loadingAnalysis ? (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+                <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mb-2"></div>
+                <p className="text-sm text-gray-600">Loading analysis...</p>
+              </div>
+            ) : (
+              <StudentAnalysisReport analysisData={overallAnalysis} />
+            )}
+          </div>
+        )}
 
         {/* Summary Statistics */}
         {studentActivity.length > 0 && (
@@ -417,7 +509,7 @@ export default function StudentActivityPage() {
                           </div>
                         </div>
 
-                        {/* View Details Button */}
+                        {/* Solutions Button */}
                         <button
                           onClick={() => {
                             router.push(`/dashboard/tests/${result.testId}/result/${result.id}`);
@@ -428,11 +520,53 @@ export default function StudentActivityPage() {
                             <path strokeLinecap="round" strokeLineJoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             <path strokeLinecap="round" strokeLineJoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
-                          View Details
+                          Solutions
+                        </button>
+
+                        {/* Test Report Button */}
+                        <button
+                          onClick={async () => {
+                            if (expandedTestId === result.testId) {
+                              setExpandedTestId(null);
+                            } else {
+                              // Load analysis if not already loaded
+                              if (!testAnalysisMap.has(result.testId)) {
+                                await loadTestAnalysis(result);
+                              }
+                              setExpandedTestId(result.testId);
+                            }
+                          }}
+                          className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLineJoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                          </svg>
+                          {expandedTestId === result.testId ? "Hide" : "Test Report"}
                         </button>
                       </div>
                     </div>
                   </div>
+
+                  {/* Test-wise Analysis */}
+                  {expandedTestId === result.testId && (
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      {loadingAnalysis && !testAnalysisMap.has(result.testId) ? (
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+                          <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-green-600 mb-2"></div>
+                          <p className="text-sm text-gray-600">Loading analysis...</p>
+                        </div>
+                      ) : testAnalysisMap.has(result.testId) ? (
+                        <StudentAnalysisReport
+                          analysisData={testAnalysisMap.get(result.testId)!}
+                          testTitle={result.testTitle}
+                        />
+                      ) : (
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+                          <p className="text-sm text-gray-500">Failed to load analysis</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
