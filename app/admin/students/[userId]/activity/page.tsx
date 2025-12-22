@@ -316,7 +316,11 @@ export default function StudentActivityPage() {
                 <p className="text-sm text-gray-600">Loading analysis...</p>
               </div>
             ) : (
-              <StudentAnalysisReport analysisData={overallAnalysis} />
+              <StudentAnalysisReport 
+                analysisData={overallAnalysis}
+                studentName={studentUser.displayName || "Unknown Student"}
+                studentEmail={studentUser.email || undefined}
+              />
             )}
           </div>
         )}
@@ -559,6 +563,8 @@ export default function StudentActivityPage() {
                         <StudentAnalysisReport
                           analysisData={testAnalysisMap.get(result.testId)!}
                           testTitle={result.testTitle}
+                          studentName={studentUser.displayName || "Unknown Student"}
+                          studentEmail={studentUser.email || undefined}
                         />
                       ) : (
                         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
