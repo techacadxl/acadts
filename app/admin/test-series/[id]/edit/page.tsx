@@ -11,6 +11,7 @@ import type { Test } from "@/lib/types/test";
 import type { TestSeriesInput } from "@/lib/types/testSeries";
 import RichTextEditor from "@/components/RichTextEditor";
 import { uploadImage } from "@/lib/utils/imageStorage";
+import { Timestamp } from "firebase/firestore";
 import { sanitizeInput } from "@/lib/utils/validation";
 
 export default function EditTestSeriesPage() {
@@ -23,6 +24,14 @@ export default function EditTestSeriesPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState<string>("");
+  const [originalPrice, setOriginalPrice] = useState<string>("");
+  const [discount, setDiscount] = useState<string>("");
+  const [mode, setMode] = useState<"online" | "offline">("online");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+  const [targetClass, setTargetClass] = useState<string>("");
+  const [whatsappLink, setWhatsappLink] = useState<string>("");
+  const [telegramLink, setTelegramLink] = useState<string>("");
   const [thumbnail, setThumbnail] = useState<string>("");
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
@@ -51,9 +60,26 @@ export default function EditTestSeriesPage() {
         setTitle(seriesData.title);
         setDescription(seriesData.description || "");
         setPrice(seriesData.price?.toString() || "0");
+        setOriginalPrice(seriesData.originalPrice?.toString() || "");
+        setDiscount(seriesData.discount?.toString() || "");
+        setMode(seriesData.mode || "online");
+        setTargetClass(seriesData.targetClass || "");
+        setWhatsappLink(seriesData.whatsappLink || "");
+        setTelegramLink(seriesData.telegramLink || "");
         setThumbnail(seriesData.thumbnail || "");
         setIsPublished(seriesData.isPublished ?? false);
         setSelectedTestIds(new Set(seriesData.testIds));
+        
+        // Convert Timestamps to date strings
+        if (seriesData.startDate) {
+          const startDateObj = seriesData.startDate.toDate();
+          setStartDate(startDateObj.toISOString().split('T')[0]);
+        }
+        if (seriesData.endDate) {
+          const endDateObj = seriesData.endDate.toDate();
+          setEndDate(endDateObj.toISOString().split('T')[0]);
+        }
+        
         setLoadingSeries(false);
       } catch (err) {
         console.error("[EditTestSeriesPage] Error loading test series:", err);
@@ -134,12 +160,70 @@ export default function EditTestSeriesPage() {
       setError(null);
 
       try {
+        // Upload thumbnail if a new file is selected
+        let thumbnailUrl = thumbnail;
+        if (thumbnailFile) {
+          setUploadingThumbnail(true);
+          try {
+            const uploadResult = await uploadImage(thumbnailFile, {
+              provider: 'base64',
+              folder: 'test-series-thumbnails'
+            });
+            thumbnailUrl = uploadResult.url;
+            console.log("[EditTestSeriesPage] Thumbnail uploaded:", thumbnailUrl);
+          } catch (uploadErr) {
+            console.error("[EditTestSeriesPage] Thumbnail upload error:", uploadErr);
+            throw new Error(
+              uploadErr instanceof Error
+                ? uploadErr.message
+                : "Failed to upload thumbnail. Please try again."
+            );
+          } finally {
+            setUploadingThumbnail(false);
+          }
+        }
+
+        // Calculate discount if original price is provided
+        let discountPercent: number | undefined;
+        let finalOriginalPrice: number | undefined;
+        if (originalPrice && originalPrice.trim()) {
+          const originalPriceValue = parseFloat(originalPrice);
+          if (!isNaN(originalPriceValue) && originalPriceValue > priceValue) {
+            finalOriginalPrice = originalPriceValue;
+            discountPercent = Math.round(((originalPriceValue - priceValue) / originalPriceValue) * 100);
+          }
+        } else if (discount && discount.trim()) {
+          discountPercent = parseFloat(discount);
+          if (!isNaN(discountPercent) && discountPercent > 0 && discountPercent <= 100) {
+            finalOriginalPrice = Math.round(priceValue / (1 - discountPercent / 100));
+          }
+        }
+
+        // Convert dates to Timestamps
+        let startDateTimestamp: Timestamp | undefined;
+        let endDateTimestamp: Timestamp | undefined;
+        if (startDate) {
+          startDateTimestamp = Timestamp.fromDate(new Date(startDate));
+        }
+        if (endDate) {
+          endDateTimestamp = Timestamp.fromDate(new Date(endDate));
+        }
+
         const updates: Partial<TestSeriesInput> = {
           title: sanitizedTitle,
           description: sanitizedDescription,
           testIds: Array.from(selectedTestIds),
           price: priceValue,
           isPublished: isPublished,
+          thumbnail: thumbnailUrl || undefined,
+          mode: mode,
+          discount: discountPercent,
+          originalPrice: finalOriginalPrice,
+          startDate: startDateTimestamp,
+          endDate: endDateTimestamp,
+          targetClass: targetClass.trim() || undefined,
+          whatsappLink: whatsappLink.trim() || undefined,
+          telegramLink: telegramLink.trim() || undefined,
         };
 
         console.log("[EditTestSeriesPage] Final updates:", updates);
@@ -316,6 +400,120 @@ export default function EditTestSeriesPage() {
                     />
                   </div>
                   <p className="mt-1 text-xs text-gray-500">Enter the price for this test series</p>
+                </div>
+
+                <div>
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
+                    Original Price (Before Discount)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-gray-500 text-sm">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="w-full border border-gray-300 rounded px-3 py-2 pl-7 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                      value={originalPrice}
+                      onChange={(e) => setOriginalPrice(e.target.value)}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">Leave empty if no discount</p>
+                </div>
+
+                <div>
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
+                    Discount (%)
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    max="100"
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                    value={discount}
+                    onChange={(e) => setDiscount(e.target.value)}
+                    placeholder="0"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Enter discount percentage (0-100)</p>
+                </div>
+
+                <div>
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
+                    Course Mode
+                  </label>
+                  <select
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                    value={mode}
+                    onChange={(e) => setMode(e.target.value as "online" | "offline")}
+                  >
+                    <option value="online">Online</option>
+                    <option value="offline">Offline</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block mb-1 text-sm font-medium text-gray-700">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 text-sm font-medium text-gray-700">
+                      End Date
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
+                    Target Class/Grade
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                    value={targetClass}
+                    onChange={(e) => setTargetClass(e.target.value)}
+                    placeholder="e.g. 11th, 12th, Dropper, Foundation"
+                  />
+                </div>
+
+                <div>
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
+                    WhatsApp Group Link
+                  </label>
+                  <input
+                    type="url"
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                    value={whatsappLink}
+                    onChange={(e) => setWhatsappLink(e.target.value)}
+                    placeholder="https://chat.whatsapp.com/..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
+                    Telegram Group Link
+                  </label>
+                  <input
+                    type="url"
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                    value={telegramLink}
+                    onChange={(e) => setTelegramLink(e.target.value)}
+                    placeholder="https://t.me/..."
+                  />
                 </div>
 
                 <div>
