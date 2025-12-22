@@ -9,6 +9,8 @@ import { getTestSeriesById, updateTestSeries } from "@/lib/db/testSeries";
 import { listTests } from "@/lib/db/tests";
 import type { Test } from "@/lib/types/test";
 import type { TestSeriesInput } from "@/lib/types/testSeries";
+import RichTextEditor from "@/components/RichTextEditor";
+import { uploadImage } from "@/lib/utils/imageStorage";
 import { sanitizeInput } from "@/lib/utils/validation";
 
 export default function EditTestSeriesPage() {
@@ -21,6 +23,10 @@ export default function EditTestSeriesPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState<string>("");
+  const [thumbnail, setThumbnail] = useState<string>("");
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+  const [isPublished, setIsPublished] = useState<boolean>(false);
   const [tests, setTests] = useState<Test[]>([]);
   const [selectedTestIds, setSelectedTestIds] = useState<Set<string>>(new Set());
   const [loadingSeries, setLoadingSeries] = useState(true);
@@ -45,6 +51,8 @@ export default function EditTestSeriesPage() {
         setTitle(seriesData.title);
         setDescription(seriesData.description || "");
         setPrice(seriesData.price?.toString() || "0");
+        setThumbnail(seriesData.thumbnail || "");
+        setIsPublished(seriesData.isPublished ?? false);
         setSelectedTestIds(new Set(seriesData.testIds));
         setLoadingSeries(false);
       } catch (err) {
@@ -131,6 +139,7 @@ export default function EditTestSeriesPage() {
           description: sanitizedDescription,
           testIds: Array.from(selectedTestIds),
           price: priceValue,
+          isPublished: isPublished,
         };
 
         console.log("[EditTestSeriesPage] Final updates:", updates);
@@ -226,30 +235,67 @@ export default function EditTestSeriesPage() {
 
                 <div>
                   <label className="block mb-1 text-sm font-medium text-gray-700">
-                    Description
+                    Thumbnail Image
                   </label>
-                  <textarea
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent font-mono"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="# Test Series Title&#10;&#10;## Overview&#10;Comprehensive test series for JEE preparation...&#10;&#10;## Features&#10;- 50+ comprehensive mock tests&#10;- Full syllabus coverage with detailed solutions&#10;- Performance tracking and analytics&#10;- 24/7 doubt resolution support"
-                    rows={12}
-                  />
-                  <div className="mt-2 p-3 bg-gray-50 rounded border border-gray-200">
-                    <p className="text-xs font-semibold text-gray-700 mb-2">Markdown Formatting Guide:</p>
-                    <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
-                      <li><code className="bg-gray-200 px-1 rounded"># Heading 1</code> - Large heading</li>
-                      <li><code className="bg-gray-200 px-1 rounded">## Heading 2</code> - Medium heading</li>
-                      <li><code className="bg-gray-200 px-1 rounded">### Heading 3</code> - Small heading</li>
-                      <li><code className="bg-gray-200 px-1 rounded">- Item</code> or <code className="bg-gray-200 px-1 rounded">* Item</code> - Bullet point</li>
-                      <li><code className="bg-gray-200 px-1 rounded">**bold**</code> - Bold text</li>
-                      <li><code className="bg-gray-200 px-1 rounded">*italic*</code> - Italic text</li>
-                      <li><code className="bg-gray-200 px-1 rounded">[Link](url)</code> - Hyperlink</li>
-                    </ul>
-                    <p className="text-xs text-gray-500 mt-2">
-                      You can also enter plain text - each line will become a bullet point automatically.
+                  <div className="space-y-2">
+                    {thumbnail && (
+                      <div className="relative w-full h-48 border border-gray-300 rounded overflow-hidden bg-gray-50">
+                        <img
+                          src={thumbnail}
+                          alt="Thumbnail preview"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setThumbnail("");
+                            setThumbnailFile(null);
+                          }}
+                          className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                          aria-label="Remove thumbnail"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setThumbnailFile(file);
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setThumbnail(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    />
+                    <p className="text-xs text-gray-500">
+                      Recommended: 800x450px or 16:9 aspect ratio. Max size: 500KB
                     </p>
                   </div>
+                </div>
+
+                <div>
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
+                    Description
+                  </label>
+                  <RichTextEditor
+                    value={description}
+                    onChange={setDescription}
+                    placeholder="Enter test series description... You can drag and drop images directly into the editor."
+                    minHeight="400px"
+                    imageFolder="test-series"
+                  />
+                  <p className="mt-2 text-xs text-gray-500">
+                    Use the rich text editor to format your description. You can add headings, lists, images, links, and more.
+                  </p>
                 </div>
 
                 <div>
@@ -270,6 +316,23 @@ export default function EditTestSeriesPage() {
                     />
                   </div>
                   <p className="mt-1 text-xs text-gray-500">Enter the price for this test series</p>
+                </div>
+
+                <div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      checked={isPublished}
+                      onChange={(e) => setIsPublished(e.target.checked)}
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      Publish this test series
+                    </span>
+                  </label>
+                  <p className="mt-1 text-xs text-gray-500 ml-6">
+                    Published test series will be visible to students on the home page
+                  </p>
                 </div>
               </div>
             </div>
@@ -360,10 +423,10 @@ export default function EditTestSeriesPage() {
               </button>
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || uploadingThumbnail}
                 className="px-4 py-2 text-sm bg-black hover:bg-gray-900 text-white rounded disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
               >
-                {submitting ? "Updating..." : "Update Test Series"}
+                {submitting || uploadingThumbnail ? "Updating..." : "Update Test Series"}
               </button>
             </div>
           </form>

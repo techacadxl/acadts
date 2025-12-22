@@ -153,11 +153,21 @@ export default function ViewTestSeriesPage() {
         <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm space-y-6">
           {/* Thumbnail */}
           <div className="flex justify-center">
-            <div className="w-full max-w-md h-48 bg-gradient-to-br from-gray-100 to-gray-200 rounded flex items-center justify-center">
-              <span className="text-6xl font-bold text-gray-400">
-                {testSeries.title.charAt(0).toUpperCase()}
-              </span>
-            </div>
+            {testSeries.thumbnail ? (
+              <div className="w-full max-w-md h-64 bg-gray-100 rounded overflow-hidden">
+                <img
+                  src={testSeries.thumbnail}
+                  alt={testSeries.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className="w-full max-w-md h-48 bg-gradient-to-br from-gray-100 to-gray-200 rounded flex items-center justify-center">
+                <span className="text-6xl font-bold text-gray-400">
+                  {testSeries.title.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Test Series Information */}

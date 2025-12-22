@@ -38,9 +38,9 @@ service cloud.firestore {
               allow delete: if isAdmin();
             }
 
-            // TestSeries collection - only admins can manage
+            // TestSeries collection - public read (for home page), only admins can manage
             match /testSeries/{testSeriesId} {
-              allow read: if isAuthenticated();
+              allow read: if true; // Allow public reads for home page display
               allow create: if isAdmin();
               allow update: if isAdmin();
               allow delete: if isAdmin();

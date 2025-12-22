@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
-import { listTestSeries, deleteTestSeries } from "@/lib/db/testSeries";
+import { listTestSeries, deleteTestSeries, toggleTestSeriesPublishStatus } from "@/lib/db/testSeries";
 import type { TestSeries } from "@/lib/types/testSeries";
 
 export default function AdminTestSeriesPage() {
@@ -16,6 +16,7 @@ export default function AdminTestSeriesPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
@@ -117,8 +118,43 @@ export default function AdminTestSeriesPage() {
     series.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handleTogglePublish = useCallback(
+    async (id: string) => {
+      const series = testSeries.find((s) => s.id === id);
+      if (!series) return;
+
+      const newPublishStatus = !series.isPublished;
+      console.log("[AdminTestSeriesPage] Toggling publish status:", { id, newPublishStatus });
+      setPublishingId(id);
+
+      try {
+        await toggleTestSeriesPublishStatus(id, newPublishStatus);
+        console.log("[AdminTestSeriesPage] Publish status updated:", id);
+        // Optimistically update local state
+        setTestSeries((prev) =>
+          prev.map((s) => (s.id === id ? { ...s, isPublished: newPublishStatus } : s))
+        );
+        setError(null);
+      } catch (err) {
+        console.error("[AdminTestSeriesPage] Error toggling publish status:", err);
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : "Failed to update publish status. Please try again.";
+        setError(errorMessage);
+        // Refresh the list to ensure consistency
+        fetchTestSeries();
+      } finally {
+        setPublishingId(null);
+      }
+      setOpenMenuId(null);
+      setMenuPosition(null);
+    },
+    [testSeries, fetchTestSeries]
+  );
+
   const handleMenuClick = useCallback(
-    (id: string, action: "view" | "edit" | "delete" | "students") => {
+    (id: string, action: "view" | "edit" | "delete" | "students" | "publish" | "unpublish") => {
       if (action === "view") {
         handleView(id);
       } else if (action === "edit") {
@@ -127,11 +163,13 @@ export default function AdminTestSeriesPage() {
         handleDelete(id);
       } else if (action === "students") {
         router.push(`/admin/test-series/${id}/students`);
+      } else if (action === "publish" || action === "unpublish") {
+        handleTogglePublish(id);
       }
       setOpenMenuId(null);
       setMenuPosition(null);
     },
-    [handleView, handleEdit, handleDelete, router]
+    [handleView, handleEdit, handleDelete, handleTogglePublish, router]
   );
 
 
@@ -261,6 +299,9 @@ export default function AdminTestSeriesPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                   Price
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  Status
+                </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
                   Actions
                 </th>
@@ -282,6 +323,17 @@ export default function AdminTestSeriesPage() {
                     <div className="text-sm font-medium text-gray-900">
                       ${series.price?.toFixed(2) || "0.00"}
                     </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        series.isPublished
+                          ? "bg-green-100 text-green-800"
+                          : "bg-gray-100 text-gray-800"
+                      }`}
+                    >
+                      {series.isPublished ? "Published" : "Draft"}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button
@@ -336,6 +388,25 @@ export default function AdminTestSeriesPage() {
             >
               View Enrolled Students
             </button>
+            {(() => {
+              const series = testSeries.find((s) => s.id === openMenuId);
+              const isPublished = series?.isPublished ?? false;
+              return (
+                <button
+                  onClick={() => handleMenuClick(openMenuId, isPublished ? "unpublish" : "publish")}
+                  disabled={publishingId === openMenuId}
+                  className="block w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                >
+                  {publishingId === openMenuId
+                    ? isPublished
+                      ? "Unpublishing..."
+                      : "Publishing..."
+                    : isPublished
+                    ? "Unpublish"
+                    : "Publish"}
+                </button>
+              );
+            })()}
             <button
               onClick={() => handleMenuClick(openMenuId, "delete")}
               disabled={deletingId === openMenuId}

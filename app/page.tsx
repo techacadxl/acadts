@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
-import { listTestSeries } from "@/lib/db/testSeries";
+import { listPublishedTestSeries, listTestSeries } from "@/lib/db/testSeries";
 import type { TestSeries } from "@/lib/types/testSeries";
 
 // Dummy test series data for home page
@@ -53,6 +53,7 @@ export default function Home() {
   const { role, loading: profileLoading } = useUserProfile();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [testSeriesList, setTestSeriesList] = useState<TestSeries[]>([]);
+  const [loadingTestSeries, setLoadingTestSeries] = useState(true);
 
   const slides = [
     {
@@ -98,14 +99,20 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [slides.length]);
 
-  // Load test series for "Know More" buttons
+  // Load test series for display on home page (only published ones)
   useEffect(() => {
     const loadTestSeries = async () => {
       try {
-        const series = await listTestSeries();
+        setLoadingTestSeries(true);
+        const series = await listPublishedTestSeries();
+        console.log("[HomePage] Loaded published test series:", series.length);
         setTestSeriesList(series);
       } catch (error) {
         console.error("[HomePage] Error loading test series:", error);
+        // Set empty array on error so UI shows empty state instead of loading forever
+        setTestSeriesList([]);
+      } finally {
+        setLoadingTestSeries(false);
       }
     };
     loadTestSeries();
@@ -419,414 +426,138 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Free Test Series Card */}
-            <div className="bg-white rounded-lg shadow-xl overflow-hidden hover:shadow-2xl transition-all transform hover:scale-105">
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <span className="bg-black text-white text-xs font-semibold px-3 py-1 rounded-full flex items-center gap-1">
-                    <span>📹</span> FREE
-                  </span>
-                  <span className="bg-[#ff6b35] text-white text-xs font-semibold px-3 py-1 rounded-full">
-                    FREE ACCESS
-                  </span>
-                </div>
-                
-                <h3 className="text-xl font-bold text-gray-900 mb-2">
-                  Free Practice Test Series
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">Basic Test Series</p>
-                
-                <ul className="space-y-2 mb-6">
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">10+ practice tests covering all topics</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">Detailed solutions and explanations</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">Performance analytics and reports</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">24/7 access to all tests</span>
-                  </li>
-                </ul>
-
-                <div className="border-t pt-4 mt-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <span className="text-2xl font-bold text-gray-900">₹0</span>
-                      <span className="text-sm text-gray-500 ml-2">+ Taxes</span>
-                    </div>
-                    <span className="bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded">
-                      FREE
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => router.push("/dashboard")}
-                    className="w-full bg-[#ff6b35] hover:bg-yellow-400 text-white py-2 rounded-lg font-semibold transition-all"
-                  >
-                    Get Started Free
-                  </button>
-                </div>
-              </div>
+          {loadingTestSeries ? (
+            <div className="text-center py-12">
+              <p className="text-white text-lg">Loading test series...</p>
             </div>
-
-            {/* Premium Test Series Card 1 */}
-            <div className="bg-white rounded-lg shadow-xl overflow-hidden hover:shadow-2xl transition-all transform hover:scale-105">
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <span className="bg-black text-white text-xs font-semibold px-3 py-1 rounded-full flex items-center gap-1">
-                    <span>📹</span> LIVE
-                  </span>
-                  <span className="bg-[#ff6b35] text-white text-xs font-semibold px-3 py-1 rounded-full">
-                    15% EARLY BIRD DISCOUNT
-                  </span>
-                </div>
+          ) : testSeriesList.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-white text-lg">No test series available at the moment.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {testSeriesList.map((series) => {
+                const isFree = !series.price || series.price === 0;
+                const originalPrice = series.price ? Math.round(series.price * 1.15) : 0;
+                const discountPercent = series.price && series.price > 0 ? 15 : 0;
                 
-                <h3 className="text-xl font-bold text-gray-900 mb-2">
-                  JEE Ultimate Test Series
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">Target 2025</p>
+                // Strip HTML tags from description for preview
+                const stripHtml = (html: string) => {
+                  if (typeof window === 'undefined') {
+                    // Server-side: simple regex approach
+                    return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+                  }
+                  // Client-side: use DOM
+                  const tmp = document.createElement("DIV");
+                  tmp.innerHTML = html;
+                  return tmp.textContent || tmp.innerText || "";
+                };
                 
-                <ul className="space-y-2 mb-6">
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">50+ comprehensive mock tests</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">Full syllabus coverage with detailed solutions</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">Performance tracking and analytics</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">24/7 doubt resolution support</span>
-                  </li>
-                </ul>
+                const cleanDescription = series.description ? stripHtml(series.description).trim() : '';
+                const descriptionPreview = cleanDescription 
+                  ? (cleanDescription.length > 120 ? cleanDescription.substring(0, 120) + '...' : cleanDescription)
+                  : "Comprehensive test series for exam preparation";
+                
+                return (
+                  <div
+                    key={series.id}
+                    className="bg-white rounded-lg shadow-xl overflow-hidden hover:shadow-2xl transition-all transform hover:scale-105"
+                  >
+                    {series.thumbnail ? (
+                      <div className="w-full h-48 overflow-hidden bg-gray-100">
+                        <img
+                          src={series.thumbnail}
+                          alt={series.title}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            console.error("[HomePage] Thumbnail load error for:", series.title);
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    ) : null}
+                    <div className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <span className="bg-black text-white text-xs font-semibold px-3 py-1 rounded-full flex items-center gap-1">
+                          <span>📹</span> {isFree ? "FREE" : "PREMIUM"}
+                        </span>
+                        {!isFree && (
+                          <span className="bg-[#ff6b35] text-white text-xs font-semibold px-3 py-1 rounded-full">
+                            {discountPercent > 0 ? `${discountPercent}% EARLY BIRD DISCOUNT` : "PREMIUM"}
+                          </span>
+                        )}
+                        {isFree && (
+                          <span className="bg-[#ff6b35] text-white text-xs font-semibold px-3 py-1 rounded-full">
+                            FREE ACCESS
+                          </span>
+                        )}
+                      </div>
+                      
+                      <h3 className="text-xl font-bold text-gray-900 mb-2">
+                        {series.title}
+                      </h3>
+                      <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+                        {descriptionPreview}
+                      </p>
+                      
+                      {series.testIds && series.testIds.length > 0 && (
+                        <div className="mb-4">
+                          <p className="text-xs text-gray-500">
+                            {series.testIds.length} Test{series.testIds.length !== 1 ? 's' : ''} included
+                          </p>
+                        </div>
+                      )}
 
-                <div className="border-t pt-4 mt-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <span className="text-sm text-gray-500 line-through">₹9,999</span>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-gray-900">₹8,499</span>
-                        <span className="text-sm text-gray-500">+ Taxes</span>
+                      <div className="border-t pt-4 mt-4">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            {!isFree && originalPrice > 0 && (
+                              <span className="text-sm text-gray-500 line-through">
+                                ₹{originalPrice.toLocaleString()}
+                              </span>
+                            )}
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-2xl font-bold text-gray-900">
+                                ₹{isFree ? "0" : (series.price || 0).toLocaleString()}
+                              </span>
+                              <span className="text-sm text-gray-500">+ Taxes</span>
+                            </div>
+                          </div>
+                          {!isFree && discountPercent > 0 && (
+                            <span className="bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded">
+                              {discountPercent}% OFF
+                            </span>
+                          )}
+                          {isFree && (
+                            <span className="bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded">
+                              FREE
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => router.push("/dashboard")}
+                          className="w-full bg-[#ff6b35] hover:bg-yellow-400 text-white py-2 rounded-lg font-semibold transition-all mb-2"
+                        >
+                          {isFree ? "Get Started Free" : "Buy Now"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleKnowMore(series.title);
+                          }}
+                          className="w-full text-center text-blue-600 hover:text-blue-800 text-sm font-medium py-1 cursor-pointer"
+                        >
+                          Know More →
+                        </button>
                       </div>
                     </div>
-                    <span className="bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded">
-                      15% OFF
-                    </span>
                   </div>
-                  <button
-                    onClick={() => router.push("/dashboard")}
-                    className="w-full bg-[#ff6b35] hover:bg-yellow-400 text-white py-2 rounded-lg font-semibold transition-all mb-2"
-                  >
-                    Buy Now
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      console.log("[HomePage] Know More button clicked");
-                      handleKnowMore("JEE Ultimate Test Series");
-                    }}
-                    className="w-full text-center text-blue-600 hover:text-blue-800 text-sm font-medium py-1 cursor-pointer"
-                  >
-                    Know More →
-                  </button>
-                </div>
-              </div>
+                );
+              })}
             </div>
-
-            {/* Premium Test Series Card 2 */}
-            <div className="bg-white rounded-lg shadow-xl overflow-hidden hover:shadow-2xl transition-all transform hover:scale-105">
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <span className="bg-black text-white text-xs font-semibold px-3 py-1 rounded-full flex items-center gap-1">
-                    <span>📹</span> RECORDED
-                  </span>
-                  <span className="bg-[#ff6b35] text-white text-xs font-semibold px-3 py-1 rounded-full">
-                    15% EARLY BIRD DISCOUNT
-                  </span>
-                </div>
-                
-                <h3 className="text-xl font-bold text-gray-900 mb-2">
-                  NEET Complete Test Series
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">Video Lectures + Online Tests</p>
-                
-                <ul className="space-y-2 mb-6">
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">40+ high-quality mock tests</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">Complete syllabus coverage with video solutions</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">Digital study material included</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">1:1 mentorship and guidance</span>
-                  </li>
-                </ul>
-
-                <div className="border-t pt-4 mt-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <span className="text-sm text-gray-500 line-through">₹7,999</span>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-gray-900">₹6,799</span>
-                        <span className="text-sm text-gray-500">+ Taxes</span>
-                      </div>
-                    </div>
-                    <span className="bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded">
-                      15% OFF
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => router.push("/dashboard")}
-                    className="w-full bg-[#ff6b35] hover:bg-yellow-400 text-white py-2 rounded-lg font-semibold transition-all mb-2"
-                  >
-                    Buy Now
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleKnowMore("NEET Complete Test Series");
-                    }}
-                    className="w-full text-center text-blue-600 hover:text-blue-800 text-sm font-medium py-1 cursor-pointer"
-                  >
-                    Know More →
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Premium Test Series Card 3 */}
-            <div className="bg-white rounded-lg shadow-xl overflow-hidden hover:shadow-2xl transition-all transform hover:scale-105">
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <span className="bg-black text-white text-xs font-semibold px-3 py-1 rounded-full flex items-center gap-1">
-                    <span>📹</span> LIVE
-                  </span>
-                  <span className="bg-[#ff6b35] text-white text-xs font-semibold px-3 py-1 rounded-full">
-                    EARLY BIRD DISCOUNT
-                  </span>
-                </div>
-                
-                <h3 className="text-xl font-bold text-gray-900 mb-2">
-                  CBSE Board Test Series
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">Complete Preparation Package</p>
-                
-                <ul className="space-y-2 mb-6">
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">30+ chapter-wise and full syllabus tests</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">Previous year papers with solutions</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">Sample papers and practice sets</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">Performance reports and analytics</span>
-                  </li>
-                </ul>
-
-                <div className="border-t pt-4 mt-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <span className="text-sm text-gray-500 line-through">₹4,999</span>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-gray-900">₹4,249</span>
-                        <span className="text-sm text-gray-500">+ Taxes</span>
-                      </div>
-                    </div>
-                    <span className="bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded">
-                      15% OFF
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => router.push("/dashboard")}
-                    className="w-full bg-[#ff6b35] hover:bg-yellow-400 text-white py-2 rounded-lg font-semibold transition-all mb-2"
-                  >
-                    Buy Now
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleKnowMore("CBSE Board Test Series");
-                    }}
-                    className="w-full text-center text-blue-600 hover:text-blue-800 text-sm font-medium py-1 cursor-pointer"
-                  >
-                    Know More →
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Premium Test Series Card 4 */}
-            <div className="bg-white rounded-lg shadow-xl overflow-hidden hover:shadow-2xl transition-all transform hover:scale-105">
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <span className="bg-black text-white text-xs font-semibold px-3 py-1 rounded-full flex items-center gap-1">
-                    <span>📹</span> RECORDED
-                  </span>
-                  <span className="bg-[#ff6b35] text-white text-xs font-semibold px-3 py-1 rounded-full">
-                    15% EARLY BIRD DISCOUNT
-                  </span>
-                </div>
-                
-                <h3 className="text-xl font-bold text-gray-900 mb-2">
-                  Foundation Test Series (1-year)
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">Video Lectures + Online Tests</p>
-                
-                <ul className="space-y-2 mb-6">
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">25+ comprehensive tests covering full syllabus</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">Digital material with 15000+ practice questions</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">Detailed video solutions for all tests</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">Lifetime access to all content</span>
-                  </li>
-                </ul>
-
-                <div className="border-t pt-4 mt-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <span className="text-sm text-gray-500 line-through">₹5,999</span>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-gray-900">₹5,099</span>
-                        <span className="text-sm text-gray-500">+ Taxes</span>
-                      </div>
-                    </div>
-                    <span className="bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded">
-                      15% OFF
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => router.push("/dashboard")}
-                    className="w-full bg-[#ff6b35] hover:bg-yellow-400 text-white py-2 rounded-lg font-semibold transition-all mb-2"
-                  >
-                    Buy Now
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleKnowMore("Foundation Test Series (1-year)");
-                    }}
-                    className="w-full text-center text-blue-600 hover:text-blue-800 text-sm font-medium py-1 cursor-pointer"
-                  >
-                    Know More →
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Premium Test Series Card 5 */}
-            <div className="bg-white rounded-lg shadow-xl overflow-hidden hover:shadow-2xl transition-all transform hover:scale-105">
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <span className="bg-black text-white text-xs font-semibold px-3 py-1 rounded-full flex items-center gap-1">
-                    <span>📹</span> RECORDED
-                  </span>
-                  <span className="bg-[#ff6b35] text-white text-xs font-semibold px-3 py-1 rounded-full">
-                    EARLY BIRD DISCOUNT
-                  </span>
-                </div>
-                
-                <h3 className="text-xl font-bold text-gray-900 mb-2">
-                  Foundation Test Series (2-year)
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">Video Lectures + Online Tests</p>
-                
-                <ul className="space-y-2 mb-6">
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">50+ comprehensive tests covering full syllabus</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">Digital material with 30000+ practice questions</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">Complete video solutions library</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-sm text-gray-700">Extended access for 2 years</span>
-                  </li>
-                </ul>
-
-                <div className="border-t pt-4 mt-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <span className="text-sm text-gray-500 line-through">₹9,999</span>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-gray-900">₹8,499</span>
-                        <span className="text-sm text-gray-500">+ Taxes</span>
-                      </div>
-                    </div>
-                    <span className="bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded">
-                      15% OFF
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => router.push("/dashboard")}
-                    className="w-full bg-[#ff6b35] hover:bg-yellow-400 text-white py-2 rounded-lg font-semibold transition-all mb-2"
-                  >
-                    Buy Now
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleKnowMore("Foundation Test Series (2-year)");
-                    }}
-                    className="w-full text-center text-blue-600 hover:text-blue-800 text-sm font-medium py-1 cursor-pointer"
-                  >
-                    Know More →
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </section>
 
