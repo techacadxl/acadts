@@ -14,6 +14,7 @@ import { getTestById } from "@/lib/db/tests";
 import type { Test } from "@/lib/types/test";
 import { getUserTestResults, getUserTestResult } from "@/lib/db/testResults";
 import type { TestResult } from "@/lib/types/testResult";
+import DescriptionRenderer from "@/components/DescriptionRenderer";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -42,7 +43,7 @@ export default function DashboardPage() {
       }
       await signOut(auth);
       console.log("[DashboardPage] Sign out successful, redirecting");
-      router.replace("/login");
+      router.replace("/");
     } catch (err) {
       console.error("[DashboardPage] Logout error:", err);
     }
@@ -272,7 +273,9 @@ export default function DashboardPage() {
                         </div>
 
                         <h3 className="text-xl font-bold text-gray-900 mb-2">{series.title}</h3>
-                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">{series.description}</p>
+                        <div className="text-sm text-gray-600 mb-4 line-clamp-2 overflow-hidden">
+                          <DescriptionRenderer description={series.description || ""} className="text-sm" />
+                        </div>
 
                         <div className="mb-4">
                           <p className="text-xs text-gray-500">
@@ -365,7 +368,9 @@ export default function DashboardPage() {
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex-1">
                             <h3 className="text-2xl font-bold text-gray-900 mb-2">{series.title}</h3>
-                            <p className="text-sm text-gray-600 mb-4">{series.description}</p>
+                            <div className="text-sm text-gray-600 mb-4">
+                              <DescriptionRenderer description={series.description || ""} className="text-sm" />
+                            </div>
                             <p className="text-xs text-gray-500">
                               Enrolled • {series.testIds?.length || 0} Tests Available
                             </p>

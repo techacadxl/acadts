@@ -11,6 +11,7 @@ import { getQuestionById } from "@/lib/db/questions";
 import type { TestResult } from "@/lib/types/testResult";
 import type { Test } from "@/lib/types/test";
 import type { Question } from "@/lib/types/question";
+import DescriptionRenderer from "@/components/DescriptionRenderer";
 
 interface QuestionWithResult extends Question {
   result: {
@@ -245,7 +246,9 @@ export default function TestResultPage() {
         {/* Header */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">{test.title}</h1>
-          <p className="text-gray-600 mb-4">{test.description}</p>
+          <div className="text-gray-600 mb-4">
+            <DescriptionRenderer description={test.description || ""} />
+          </div>
           
           {/* Summary Statistics */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">

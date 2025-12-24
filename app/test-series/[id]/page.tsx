@@ -209,7 +209,9 @@ export default function TestSeriesDetailsPage() {
                             {test.questions && <span>📝 {test.questions.length} Questions</span>}
                           </div>
                           {test.description && (
-                            <p className="text-sm text-gray-600 mt-2">{test.description}</p>
+                            <div className="text-sm text-gray-600 mt-2">
+                              <DescriptionRenderer description={test.description} className="text-sm" />
+                            </div>
                           )}
                         </div>
                       </div>

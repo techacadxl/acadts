@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
 import { listPublishedTestSeries, listTestSeries } from "@/lib/db/testSeries";
 import type { TestSeries } from "@/lib/types/testSeries";
+import DescriptionRenderer from "@/components/DescriptionRenderer";
 
 // Dummy test series data for home page
 const DUMMY_TEST_SERIES: Record<string, Omit<TestSeries, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>> = {
@@ -51,33 +52,8 @@ export default function Home() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { role, loading: profileLoading } = useUserProfile();
-  const [currentSlide, setCurrentSlide] = useState(0);
   const [testSeriesList, setTestSeriesList] = useState<TestSeries[]>([]);
   const [loadingTestSeries, setLoadingTestSeries] = useState(true);
-
-  const slides = [
-    {
-      title: "The Intelligent Classroom Era Begins",
-      subtitle: "AI-Powered Learning Platform",
-      description: "Transform your learning experience with our advanced test system",
-      videoUrl: "#",
-      image: "🎓"
-    },
-    {
-      title: "Master Your Exams",
-      subtitle: "Comprehensive Test Series",
-      description: "Practice with thousands of questions and track your progress",
-      videoUrl: "#",
-      image: "📚"
-    },
-    {
-      title: "Learn at Your Pace",
-      subtitle: "Personalized Learning Path",
-      description: "Adaptive tests that adjust to your learning style",
-      videoUrl: "#",
-      image: "🚀"
-    }
-  ];
 
   // Redirect logged-in users to their appropriate dashboard
   useEffect(() => {
@@ -92,13 +68,6 @@ export default function Home() {
     }
   }, [user, role, authLoading, profileLoading, router]);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % slides.length);
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [slides.length]);
-
   // Load test series for display on home page (only published ones)
   useEffect(() => {
     const loadTestSeries = async () => {
@@ -109,7 +78,6 @@ export default function Home() {
         setTestSeriesList(series);
       } catch (error) {
         console.error("[HomePage] Error loading test series:", error);
-        // Set empty array on error so UI shows empty state instead of loading forever
         setTestSeriesList([]);
       } finally {
         setLoadingTestSeries(false);
@@ -120,7 +88,6 @@ export default function Home() {
 
   const handleKnowMore = async (title: string) => {
     console.log("[HomePage] Know More clicked for:", title);
-    console.log("[HomePage] Available test series count:", testSeriesList.length);
     
     let seriesToSearch = testSeriesList;
     
@@ -131,8 +98,6 @@ export default function Home() {
         const series = await listTestSeries();
         setTestSeriesList(series);
         seriesToSearch = series;
-        console.log("[HomePage] Loaded test series:", series.length);
-        console.log("[HomePage] Series titles:", series.map(s => s.title));
       } catch (error) {
         console.error("[HomePage] Error loading test series:", error);
         alert("Unable to load test series. Please try again.");
@@ -140,53 +105,38 @@ export default function Home() {
       }
     }
     
-    // Try to find matching test series by title (more flexible matching)
+    // Try to find matching test series by title
     const matchingSeries = seriesToSearch.find((series) => {
       const seriesTitle = series.title.toLowerCase().trim();
       const searchTitle = title.toLowerCase().trim();
       
-      console.log("[HomePage] Comparing:", seriesTitle, "with", searchTitle);
-      
       // Exact match
       if (seriesTitle === searchTitle) {
-        console.log("[HomePage] Exact match found!");
         return true;
       }
       
       // Contains match
       if (seriesTitle.includes(searchTitle) || searchTitle.includes(seriesTitle)) {
-        console.log("[HomePage] Contains match found!");
         return true;
       }
       
-      // Word match (for partial matches like "JEE Ultimate" matching "JEE Ultimate Test Series")
+      // Word match
       const seriesWords = seriesTitle.split(/\s+/);
       const searchWords = searchTitle.split(/\s+/);
       const matchingWords = searchWords.filter(word => 
         seriesWords.some(sw => sw.includes(word) || word.includes(sw))
       );
       
-      const isMatch = matchingWords.length >= Math.min(2, searchWords.length);
-      if (isMatch) {
-        console.log("[HomePage] Word match found!");
-      }
-      return isMatch;
+      return matchingWords.length >= Math.min(2, searchWords.length);
     });
     
     if (matchingSeries && matchingSeries.id) {
-      console.log("[HomePage] Found matching series:", matchingSeries.title, "ID:", matchingSeries.id);
-      // Navigate to details page
       router.push(`/test-series/${matchingSeries.id}`);
     } else {
-      console.log("[HomePage] No matching series found in database, using dummy data for:", title);
-      
       // Use dummy data as fallback
       const dummyData = DUMMY_TEST_SERIES[title];
       if (dummyData) {
-        // Create a dummy ID based on title
         const dummyId = title.toLowerCase().replace(/\s+/g, '-').replace(/[()]/g, '');
-        console.log("[HomePage] Using dummy data, navigating to:", `/test-series/${dummyId}`);
-        // Store dummy data in sessionStorage to pass to details page
         if (typeof window !== 'undefined') {
           const dummySeries: TestSeries = {
             id: dummyId,
@@ -202,364 +152,542 @@ export default function Home() {
         }
         router.push(`/test-series/${dummyId}`);
       } else {
-        console.log("[HomePage] No dummy data available for:", title);
         alert(`Test series "${title}" not found. Redirecting to dashboard.`);
         router.push("/dashboard");
       }
     }
   };
 
-  const nextSlide = () => {
-    setCurrentSlide((prev) => (prev + 1) % slides.length);
-  };
-
-  const prevSlide = () => {
-    setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
-  };
-
   // Show loading state while checking auth
   if (authLoading || profileLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
-        <p className="text-gray-700 text-lg">Loading...</p>
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#ff6b35] border-t-transparent mb-4"></div>
+          <p className="text-gray-700 font-medium">Loading...</p>
+        </div>
       </div>
     );
   }
 
-  // If user is logged in, show redirect message (they'll be redirected by useEffect)
+  // If user is logged in, show redirect message
   if (user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
-        <p className="text-gray-700 text-lg">Redirecting to your dashboard...</p>
+        <p className="text-gray-700 font-medium">Redirecting to your dashboard...</p>
       </div>
     );
   }
 
   // Show landing page for non-logged-in users
   return (
-    <div className="min-h-screen bg-white relative overflow-hidden">
-      {/* Background Texture Pattern */}
-      <div className="fixed inset-0 opacity-5 pointer-events-none">
-        <div className="absolute top-0 left-0 w-full h-full">
-          {/* Golden/Yellow Geometric Pattern */}
-          <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <pattern id="texture" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-                <rect width="40" height="40" fill="white"/>
-                <circle cx="10" cy="10" r="2" fill="#fcd34d" opacity="0.2"/>
-                <circle cx="30" cy="10" r="2" fill="#fcd34d" opacity="0.2"/>
-                <circle cx="10" cy="30" r="2" fill="#fcd34d" opacity="0.2"/>
-                <circle cx="30" cy="30" r="2" fill="#fcd34d" opacity="0.2"/>
-                <polygon points="20,5 25,15 15,15" fill="#fcd34d" opacity="0.15"/>
-                <polygon points="20,35 25,25 15,25" fill="#fcd34d" opacity="0.15"/>
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#texture)"/>
-          </svg>
-        </div>
-      </div>
-      
-      {/* Top Dark Teal Bar */}
-      <div className="h-1 bg-teal-800"></div>
-      
-      {/* Navbar - Orange Background */}
-      <nav className="bg-[#ff6b35] text-white px-4 md:px-8 py-4 shadow-lg relative z-10">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center space-x-8">
+    <div className="min-h-screen bg-gradient-to-br from-white via-orange-50/40 to-yellow-50/30">
+      {/* Navigation Bar */}
+      <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <div className="text-2xl font-bold text-white">
-              <div className="leading-tight">
-                <div className="flex items-center">
-                  <span className="text-white">Acad</span>
-                  <span className="text-white relative">
-                    XL
-                    <span className="absolute -top-1 left-0 text-yellow-300 text-sm">▲</span>
-                  </span>
-                </div>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-[#ff6b35] to-yellow-400 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg">A</span>
+              </div>
+              <div className="text-xl font-bold text-gray-900">
+                Acad<span className="text-[#ff6b35]">XL</span>
               </div>
             </div>
+            
             {/* Navigation Links */}
-            <div className="hidden md:flex items-center space-x-6">
-              <a href="#tests" className="text-white hover:text-yellow-200 transition-colors font-medium">Tests</a>
-              <a href="#series" className="text-white hover:text-yellow-200 transition-colors font-medium">Test Series</a>
-              <a href="#dashboard" className="text-white hover:text-yellow-200 transition-colors font-medium">Dashboard</a>
-              <div className="relative group">
-                <a href="#resources" className="text-white hover:text-yellow-200 transition-colors flex items-center font-medium">
-                  Resources
-                  <span className="ml-1 text-sm">▼</span>
-                </a>
-              </div>
+            <div className="hidden md:flex items-center space-x-8">
+              <a href="#features" className="text-gray-700 hover:text-[#ff6b35] transition-colors font-medium">
+                About Us
+              </a>
+              <a href="#test-series" className="text-gray-700 hover:text-[#ff6b35] transition-colors font-medium">
+                All Test Series
+              </a>
             </div>
-          </div>
-          {/* Action Buttons */}
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={() => router.push("/login")}
-              className="px-4 py-2 border-2 border-white text-white rounded hover:bg-white/10 transition-colors font-medium"
-            >
-              Login
-            </button>
-            <button
-              onClick={() => router.push("/register")}
-              className="px-4 py-2 text-white hover:text-yellow-200 transition-colors font-medium"
-            >
-              Signup
-            </button>
+            
+            {/* Login and Register Buttons */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.push("/login")}
+                className="px-6 py-2 bg-transparent border-2 border-[#ff6b35] text-[#ff6b35] rounded-lg hover:bg-[#ff6b35] hover:text-white transition-colors font-semibold"
+              >
+                Login
+              </button>
+              <button
+                onClick={() => router.push("/register")}
+                className="px-6 py-2 bg-[#ff6b35] text-white rounded-lg hover:bg-[#e55a2b] transition-colors font-semibold"
+              >
+                Register
+              </button>
+            </div>
           </div>
         </div>
       </nav>
 
-      {/* Hero Section with Slider */}
-      <div className="relative overflow-hidden bg-white relative z-0">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-20">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-            {/* Left Side - AI/Graphic Section */}
-            <div className="relative h-[400px] md:h-[500px] flex items-center justify-center">
-              <div className="relative w-full h-full">
-                {/* Background Pattern */}
-                <div className="absolute inset-0 opacity-10">
-                  <div className="grid grid-cols-8 gap-2 h-full">
-                    {Array.from({ length: 64 }).map((_, i) => (
-                      <div key={i} className="bg-[#fcd34d] rounded-sm opacity-20"></div>
-                    ))}
-                  </div>
-                </div>
-                
-                {/* Central Graphic */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="relative">
-                    {/* Glowing AI Circle */}
-                    <div className="w-48 h-48 md:w-64 md:h-64 rounded-full bg-gradient-to-br from-[#ff6b35] to-[#fcd34d] flex items-center justify-center shadow-2xl">
-                      <div className="text-6xl md:text-8xl font-bold text-gray-100">AI</div>
-                    </div>
-                    
-                    {/* Floating Icons */}
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-16 h-16 bg-[#a78bfa] rounded-xl flex items-center justify-center shadow-lg">
-                      <span className="text-2xl font-bold text-white">A</span>
-                    </div>
-                    <div className="absolute top-1/4 -left-8 w-16 h-16 bg-[#60a5fa] rounded-xl flex items-center justify-center shadow-lg">
-                      <span className="text-2xl">⭐</span>
-                    </div>
-                    <div className="absolute -bottom-8 left-1/4 w-16 h-16 bg-[#34d399] rounded-xl flex items-center justify-center shadow-lg">
-                      <span className="text-2xl">📄</span>
-                    </div>
-                    <div className="absolute bottom-1/4 -right-8 w-16 h-16 bg-[#f472b6] rounded-xl flex items-center justify-center shadow-lg">
-                      <span className="text-2xl">🏠</span>
-                    </div>
-                  </div>
-                </div>
+      {/* Hero Section */}
+      <section className="relative min-h-[90vh] flex items-center overflow-hidden bg-gradient-to-br from-white via-orange-50/35 to-transparent">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 w-full">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            {/* Left Side - Text Content */}
+            <div className="z-10">
+              <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold mb-6 leading-tight">
+                <span className="text-gray-900">Practice. </span>
+                <span className="text-[#ff6b35]">Understand.</span>
+                <span className="text-gray-900"> Improve. </span>
+                <span className="text-[#ff6b35]">Repeat.</span>
+              </h1>
+              <p className="text-lg sm:text-xl text-gray-600 mb-8 leading-relaxed max-w-2xl">
+                High-quality exam-level tests with step-by-step solutions that help you learn from every mistake.
+              </p>
+              
+              {/* CTA Buttons */}
+              <div className="flex flex-col sm:flex-row gap-4 mb-8">
+                <button
+                  onClick={() => router.push("/register")}
+                  className="px-8 py-4 bg-[#ff6b35] text-white rounded-lg hover:bg-[#e55a2b] transition-all font-semibold text-lg flex items-center justify-center gap-2 group shadow-lg"
+                >
+                  Start Practicing
+                  <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => {
+                    document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="px-8 py-4 bg-transparent border-2 border-[#ff6b35] text-[#ff6b35] rounded-lg hover:bg-[#ff6b35] hover:text-white transition-all font-semibold text-lg"
+                >
+                  View Demo Report
+                </button>
               </div>
             </div>
 
-            {/* Right Side - Content Slider */}
-            <div className="relative">
-              <div className="relative h-[400px] md:h-[500px]">
-                {/* Slider Container */}
-                <div className="relative h-full overflow-hidden rounded-lg">
-                  {slides.map((slide, index) => (
-                    <div
-                      key={index}
-                      className={`absolute inset-0 transition-opacity duration-500 ${
-                        index === currentSlide ? 'opacity-100' : 'opacity-0'
-                      }`}
-                    >
-                      <div className="h-full flex flex-col justify-center space-y-6 p-6">
-                        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight">
-                          Begins
-                          <span className="block mt-2">
-                            <span className="relative inline-block">
-                              Classroom
-                              <svg className="absolute -bottom-2 left-0 w-full h-3 text-[#fcd34d]" viewBox="0 0 200 20">
-                                <path d="M0,15 Q50,5 100,10 T200,8" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round"/>
-                              </svg>
-                            </span>
-                          </span>
-                        </h1>
-                        <p className="text-xl md:text-2xl text-[#fcd34d] font-semibold">
-                          AI-Powered Learning Platform
-                        </p>
-                        <p className="text-lg text-gray-700">
-                          Transform your learning experience with our advanced test system
-                        </p>
-                        
-                        {/* Video Embed Section */}
-                        <div className="border border-gray-300 rounded-lg overflow-hidden bg-white shadow-md">
-                          <div className="bg-gray-900 px-4 py-2 flex items-center justify-between">
-                            <span className="text-white text-sm font-medium">
-                              The Intelligent Classroom Era Begins | AI that transforms learning
-                            </span>
-                            <div className="flex space-x-2">
-                              <button className="text-red-500 hover:text-red-400">⏰</button>
-                              <button className="text-[#fcd34d] hover:text-yellow-400">↗</button>
-                            </div>
-                          </div>
-                          <div className="relative bg-gradient-to-br from-[#ff6b35] to-[#fcd34d] aspect-video flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity">
-                            <div className="w-16 h-16 bg-blue-400 rounded-lg flex items-center justify-center">
-                              <div className="text-3xl text-white ml-1">▶</div>
-                            </div>
-                          </div>
+            {/* Right Side - Illustration */}
+            <div className="relative lg:h-[600px] flex items-center justify-center">
+              {/* Main Character Illustration */}
+              <div className="relative w-full max-w-lg">
+                {/* Student Character */}
+                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-20">
+                  {/* Head */}
+                  <div className="w-24 h-24 bg-gradient-to-br from-amber-200 to-amber-300 rounded-full border-4 border-white shadow-2xl mx-auto mb-2"></div>
+                  {/* Body */}
+                  <div className="w-32 h-40 bg-gradient-to-br from-[#ff6b35] to-orange-600 rounded-2xl shadow-2xl mx-auto relative">
+                    {/* Book in hand */}
+                    <div className="absolute -left-6 top-8 w-12 h-16 bg-white rounded-lg shadow-xl transform -rotate-12">
+                      <div className="p-2">
+                        <div className="h-1 bg-orange-200 rounded mb-1"></div>
+                        <div className="h-1 bg-orange-200 rounded mb-1"></div>
+                        <div className="h-1 bg-orange-200 rounded"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Large Tablet/Device */}
+                <div className="absolute top-10 right-0 w-64 h-80 bg-gradient-to-br from-[#ff6b35] to-yellow-500 rounded-3xl shadow-2xl p-4 z-10">
+                  {/* Device Screen */}
+                  <div className="bg-white rounded-2xl h-full p-4 relative overflow-hidden">
+                    {/* Top notch */}
+                    <div className="absolute top-2 left-1/2 -translate-x-1/2 w-16 h-2 bg-gray-800 rounded-full"></div>
+                    
+                    {/* Screen Content */}
+                    <div className="mt-6 space-y-3">
+                      {/* Progress bar */}
+                      <div className="h-2 bg-orange-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-[#ff6b35] to-yellow-500 rounded-full w-3/4"></div>
+                      </div>
+                      
+                      {/* Wavy lines */}
+                      <div className="space-y-2">
+                        <div className="h-1 bg-gradient-to-r from-orange-200 to-yellow-200 rounded-full"></div>
+                        <div className="h-1 bg-gradient-to-r from-yellow-200 to-amber-200 rounded-full w-5/6"></div>
+                        <div className="h-1 bg-gradient-to-r from-amber-200 to-orange-200 rounded-full w-4/6"></div>
+                      </div>
+                      
+                      {/* Stars */}
+                      <div className="flex gap-1 mt-4">
+                        {[...Array(2)].map((_, i) => (
+                          <svg key={i} className="w-6 h-6 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                          </svg>
+                        ))}
+                      </div>
+                      
+                      {/* Checklist extending from bottom */}
+                      <div className="absolute bottom-4 right-0 bg-[#ff6b35] text-white px-4 py-2 rounded-l-lg shadow-lg">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="font-bold text-sm">TEST</span>
                         </div>
                       </div>
                     </div>
-                  ))}
+                  </div>
                 </div>
 
-                {/* Slider Navigation Arrows */}
-                <button
-                  onClick={prevSlide}
-                  className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 bg-[#ff6b35] text-white w-12 h-12 rounded-full flex items-center justify-center hover:bg-[#ff8555] transition-colors shadow-lg z-10"
-                  aria-label="Previous slide"
-                >
-                  ‹
-                </button>
-                <button
-                  onClick={nextSlide}
-                  className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 bg-[#ff6b35] text-white w-12 h-12 rounded-full flex items-center justify-center hover:bg-[#ff8555] transition-colors shadow-lg z-10"
-                  aria-label="Next slide"
-                >
-                  ›
-                </button>
+                {/* Decorative Elements */}
+                {/* Gear Icon */}
+                <div className="absolute top-32 right-20 w-16 h-16 bg-yellow-400 rounded-full flex items-center justify-center shadow-xl z-30">
+                  <svg className="w-10 h-10 text-gray-900" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                  </svg>
+                </div>
 
-                {/* Slider Dots */}
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2 z-10">
-                  {slides.map((_, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setCurrentSlide(index)}
-                      className={`w-3 h-3 rounded-full transition-all ${
-                        index === currentSlide
-                          ? 'bg-[#fcd34d] w-8'
-                          : 'bg-gray-400 hover:bg-gray-500'
-                      }`}
-                      aria-label={`Go to slide ${index + 1}`}
-                    />
-                  ))}
+                {/* Plant */}
+                <div className="absolute bottom-20 left-10 w-12 h-16 bg-green-400 rounded-t-full shadow-xl z-20">
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-8 h-8 bg-green-300 rounded-full"></div>
+                  <div className="absolute -top-2 left-2 w-6 h-6 bg-green-200 rounded-full"></div>
+                  <div className="absolute -top-2 right-2 w-6 h-6 bg-green-200 rounded-full"></div>
+                </div>
+
+                {/* Small Console */}
+                <div className="absolute bottom-32 right-32 w-20 h-12 bg-gray-800 rounded-lg shadow-xl z-20 flex items-center justify-center gap-1">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  <div className="w-2 h-2 bg-red-400 rounded-full"></div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </section>
+
+      {/* Why Choose Our Test Series Section */}
+      <section id="features" className="py-20 bg-gradient-to-br from-gray-50 via-orange-50/35 to-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">Why Choose Our Test Series?</h2>
+            <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+              We don't just give tests — we help students understand their performance and fix mistakes the right way.
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            {/* Left Side - Poster/Icon */}
+            <div className="flex items-center justify-center">
+              <div className="relative w-full max-w-md">
+                <div className="bg-gradient-to-br from-[#ff6b35] to-yellow-400 rounded-3xl p-12 shadow-2xl transform rotate-3 hover:rotate-0 transition-transform duration-300">
+                  <div className="bg-white rounded-2xl p-8 shadow-lg">
+                    <div className="text-center">
+                      <div className="w-32 h-32 bg-gradient-to-br from-[#ff6b35] to-yellow-400 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl">
+                        <svg className="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-2xl font-bold text-gray-900 mb-2">Test Series</h3>
+                      <p className="text-gray-600">Your Path to Success</p>
+                    </div>
+                  </div>
+                </div>
+                {/* Decorative elements */}
+                <div className="absolute -top-4 -right-4 w-24 h-24 bg-yellow-300 rounded-full opacity-20 blur-xl"></div>
+                <div className="absolute -bottom-4 -left-4 w-32 h-32 bg-orange-300 rounded-full opacity-20 blur-xl"></div>
+              </div>
+            </div>
+
+            {/* Right Side - 4 Headings with Hover Content */}
+            <div className="space-y-4">
+              {/* Feature 1: Detailed Performance Reports */}
+              <div className="group relative">
+                <div className="bg-white rounded-xl p-6 border-2 border-gray-200 hover:border-[#ff6b35] transition-all duration-300 cursor-pointer">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-[#ff6b35] to-yellow-400 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <span className="text-2xl">📊</span>
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 group-hover:text-[#ff6b35] transition-colors">
+                        Detailed Performance Reports
+                      </h3>
+                    </div>
+                    <svg className="w-6 h-6 text-gray-400 group-hover:text-[#ff6b35] transform group-hover:rotate-90 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                  
+                  {/* Content on Hover */}
+                  <div className="max-h-0 overflow-hidden group-hover:max-h-[500px] transition-all duration-500 ease-in-out">
+                    <div className="pt-4 mt-4 border-t border-gray-200">
+                      <ul className="space-y-3 text-gray-600">
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Combined Reports to track overall progress</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Test-wise Analysis for every single test</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Topic-wise strengths & weaknesses</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Accuracy, speed, and rank insights</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Compare performance with peers</span>
+                        </li>
+                      </ul>
+                      <p className="mt-4 text-[#ff6b35] font-semibold">
+                        Know exactly where you stand and what to improve.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Feature 2: Tests Based on Real Exam Pattern */}
+              <div className="group relative">
+                <div className="bg-white rounded-xl p-6 border-2 border-gray-200 hover:border-[#ff6b35] transition-all duration-300 cursor-pointer">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-[#ff6b35] to-yellow-400 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <span className="text-2xl">📝</span>
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 group-hover:text-[#ff6b35] transition-colors">
+                        Tests Based on Real Exam Pattern
+                      </h3>
+                    </div>
+                    <svg className="w-6 h-6 text-gray-400 group-hover:text-[#ff6b35] transform group-hover:rotate-90 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                  
+                  {/* Content on Hover */}
+                  <div className="max-h-0 overflow-hidden group-hover:max-h-[500px] transition-all duration-500 ease-in-out">
+                    <div className="pt-4 mt-4 border-t border-gray-200">
+                      <ul className="space-y-3 text-gray-600">
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Tests strictly follow the latest exam syllabus & pattern</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Balanced mix of easy, moderate & high-level questions</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Proper time distribution like the actual exam</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Sectional tests, full-length tests & practice tests</span>
+                        </li>
+                      </ul>
+                      <p className="mt-4 text-[#ff6b35] font-semibold">
+                        No surprises on exam day.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Feature 3: High-Quality Questions */}
+              <div className="group relative">
+                <div className="bg-white rounded-xl p-6 border-2 border-gray-200 hover:border-[#ff6b35] transition-all duration-300 cursor-pointer">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-[#ff6b35] to-yellow-400 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <span className="text-2xl">🧠</span>
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 group-hover:text-[#ff6b35] transition-colors">
+                        High-Quality Questions
+                      </h3>
+                    </div>
+                    <svg className="w-6 h-6 text-gray-400 group-hover:text-[#ff6b35] transform group-hover:rotate-90 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                  
+                  {/* Content on Hover */}
+                  <div className="max-h-0 overflow-hidden group-hover:max-h-[500px] transition-all duration-500 ease-in-out">
+                    <div className="pt-4 mt-4 border-t border-gray-200">
+                      <ul className="space-y-3 text-gray-600">
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Carefully curated questions by experienced educators</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Focus on concept clarity, not rote learning</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Covers all important & frequently asked topics</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Updated regularly as per exam trends</span>
+                        </li>
+                      </ul>
+                      <p className="mt-4 text-[#ff6b35] font-semibold">
+                        Practice questions that actually matter.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Feature 4: Detailed & Step-by-Step Solutions */}
+              <div className="group relative">
+                <div className="bg-white rounded-xl p-6 border-2 border-gray-200 hover:border-[#ff6b35] transition-all duration-300 cursor-pointer">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-[#ff6b35] to-yellow-400 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <span className="text-2xl">📘</span>
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 group-hover:text-[#ff6b35] transition-colors">
+                        Detailed & Step-by-Step Solutions
+                      </h3>
+                    </div>
+                    <svg className="w-6 h-6 text-gray-400 group-hover:text-[#ff6b35] transform group-hover:rotate-90 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                  
+                  {/* Content on Hover */}
+                  <div className="max-h-0 overflow-hidden group-hover:max-h-[500px] transition-all duration-500 ease-in-out">
+                    <div className="pt-4 mt-4 border-t border-gray-200">
+                      <ul className="space-y-3 text-gray-600">
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Clear, well-explained solutions for every question</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Multiple approaches wherever applicable</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Concept explanation + exam-oriented tips</span>
+                        </li>
+                        <li className="flex items-start gap-3">
+                          <svg className="w-5 h-5 text-[#ff6b35] mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Helps students learn even from wrong answers</span>
+                        </li>
+                      </ul>
+                      <p className="mt-4 text-[#ff6b35] font-semibold">
+                        Mistakes become your biggest strength.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Test Series Section */}
-      <section id="series" className="py-16 md:py-24 px-4 md:px-8 bg-white relative z-0">
-        <div className="max-w-7xl mx-auto">
+      <section id="test-series" className="py-20 bg-gradient-to-br from-white via-orange-50/25 to-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-              Our Test Series
-            </h2>
-            <p className="text-xl text-[#fcd34d] font-medium">
-              Choose from our comprehensive collection of test series
-            </p>
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">Our Test Series</h2>
+            <p className="text-lg text-gray-600">Choose from our comprehensive collection</p>
           </div>
 
           {loadingTestSeries ? (
-            <div className="text-center py-12">
-              <p className="text-white text-lg">Loading test series...</p>
+            <div className="text-center py-16">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mb-4"></div>
+              <p className="text-gray-600 font-medium">Loading test series...</p>
             </div>
           ) : testSeriesList.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-white text-lg">No test series available at the moment.</p>
+            <div className="text-center py-16">
+              <p className="text-gray-600 font-medium">No test series available at the moment.</p>
             </div>
           ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {testSeriesList.map((series) => {
                 const isFree = !series.price || series.price === 0;
                 const originalPrice = series.originalPrice || (series.price ? Math.round(series.price * 1.15) : 0);
                 const discountPercent = series.discount || (series.price && series.price > 0 ? 15 : 0);
                 
-                // Format dates
-                const formatDate = (timestamp: any) => {
-                  if (!timestamp) return null;
-                  try {
-                    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-                    return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-                  } catch {
-                    return null;
-                  }
-                };
-                const startDateStr = series.startDate ? formatDate(series.startDate) : null;
-                const endDateStr = series.endDate ? formatDate(series.endDate) : null;
-                
-                // Strip HTML tags from description for preview
-                const stripHtml = (html: string) => {
-                  if (typeof window === 'undefined') {
-                    // Server-side: simple regex approach
-                    return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
-                  }
-                  // Client-side: use DOM
-                  const tmp = document.createElement("DIV");
-                  tmp.innerHTML = html;
-                  return tmp.textContent || tmp.innerText || "";
-                };
-                
-                const cleanDescription = series.description ? stripHtml(series.description).trim() : '';
-                const descriptionPreview = cleanDescription 
-                  ? (cleanDescription.length > 120 ? cleanDescription.substring(0, 120) + '...' : cleanDescription)
-                  : "Comprehensive test series for exam preparation";
-                
                 return (
                   <div
                     key={series.id}
-                    className="bg-white rounded-lg shadow-xl overflow-hidden border border-red-600 relative"
+                    className="bg-white rounded-xl border border-gray-200 shadow-lg hover:shadow-xl transition-all overflow-hidden"
                   >
-                    {/* Thumbnail/Banner Section */}
+                    {/* Thumbnail Section */}
                     {series.thumbnail ? (
-                      <div className="relative w-full h-56 overflow-hidden">
-                        {/* Background Image - Only Image, No Overlay */}
+                      <div className="relative w-full h-48 overflow-hidden bg-gray-100">
                         <img
                           src={series.thumbnail}
                           alt={series.title}
                           className="w-full h-full object-cover"
-                          style={{ objectPosition: 'center' }}
                           onError={(e) => {
-                            console.error("[HomePage] Thumbnail load error for:", series.title);
                             e.currentTarget.style.display = 'none';
                           }}
                         />
-                        
-                        {/* OFFLINE/ONLINE Tag - Top Left Corner */}
-                        <div className="absolute top-3 left-3 z-10">
-                          <div className={`${
-                            series.mode === "offline" 
-                              ? "bg-red-600" 
-                              : "bg-blue-500"
-                          } text-white px-3 py-1 font-bold text-xs uppercase shadow-lg`}
-                          style={{
-                            clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%)'
-                          }}>
-                            {series.mode === "offline" ? "OFFLINE" : "ONLINE"}
+                        {series.mode && (
+                          <div className="absolute top-3 left-3">
+                            <span className={`${
+                              series.mode === "offline" 
+                                ? "bg-red-500" 
+                                : "bg-[#ff6b35]"
+                            } text-white px-3 py-1 text-xs font-semibold rounded-lg uppercase`}>
+                              {series.mode === "offline" ? "OFFLINE" : "ONLINE"}
+                            </span>
                           </div>
-                        </div>
-                        
-                        {/* Discount Badge - Top Right Corner */}
+                        )}
                         {!isFree && discountPercent > 0 && (
-                          <div className="absolute top-3 right-3 z-20" style={{ zIndex: 20 }}>
-                            <div className="bg-gray-900 rounded-lg px-4 py-3 shadow-2xl">
-                              <div className="text-white text-xs font-semibold mb-1 uppercase tracking-wide">GET UP TO</div>
-                              <div className="text-white font-bold text-3xl leading-none">
-                                {discountPercent}% <span className="text-xl">OFF</span>
-                              </div>
-                            </div>
+                          <div className="absolute top-3 right-3">
+                            <span className="bg-orange-500 text-white px-3 py-1 text-sm font-bold rounded-lg">
+                              {discountPercent}% OFF
+                            </span>
                           </div>
                         )}
                       </div>
                     ) : (
-                      <div className="relative w-full h-56 bg-gradient-to-r from-orange-800 via-orange-700 to-orange-600 flex items-center justify-center">
-                        {/* OFFLINE/ONLINE Tag - Top Left Corner */}
-                        <div className="absolute top-3 left-3 z-10">
-                          <div className={`${
-                            series.mode === "offline" 
-                              ? "bg-red-600" 
-                              : "bg-blue-500"
-                          } text-white px-3 py-1 font-bold text-xs uppercase shadow-lg`}
-                          style={{
-                            clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%)'
-                          }}>
-                            {series.mode === "offline" ? "OFFLINE" : "ONLINE"}
+                      <div className="relative w-full h-48 bg-gradient-to-br from-[#ff6b35] to-yellow-500 flex items-center justify-center">
+                        {series.mode && (
+                          <div className="absolute top-3 left-3">
+                            <span className={`${
+                              series.mode === "offline" 
+                                ? "bg-red-500" 
+                                : "bg-white text-blue-600"
+                            } px-3 py-1 text-xs font-semibold rounded-lg uppercase`}>
+                              {series.mode === "offline" ? "OFFLINE" : "ONLINE"}
+                            </span>
                           </div>
-                        </div>
-                        <div className="text-white text-6xl font-bold opacity-50">
+                        )}
+                        <div className="text-white text-5xl font-bold opacity-50">
                           {series.title.charAt(0).toUpperCase()}
                         </div>
                       </div>
@@ -567,96 +695,54 @@ export default function Home() {
 
                     {/* Content Section */}
                     <div className="p-6">
-                      {/* Title and Badges Row */}
                       <div className="flex items-start justify-between mb-3">
-                        <h3 className="text-xl font-bold text-gray-900 flex-1 mr-2">
+                        <h3 className="text-xl font-bold text-gray-900 flex-1">
                           {series.title}
                         </h3>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {isFree && (
-                            <span className="bg-yellow-400 text-black text-xs font-semibold px-2 py-1 rounded">
-                              NEW
-                            </span>
-                          )}
-                          <span className="bg-gray-200 text-gray-700 text-xs font-semibold px-2 py-1 rounded">
-                            Hinglish
+                        {isFree && (
+                          <span className="bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded ml-2">
+                            FREE
                           </span>
-                        </div>
+                        )}
                       </div>
 
-                      {/* WhatsApp and Contact Icons */}
-                      <div className="flex items-center gap-2 mb-3">
-                        {series.whatsappLink && (
-                          <a
-                            href={series.whatsappLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-center w-10 h-10 rounded-full bg-green-500 hover:bg-green-600 text-white transition-colors shadow-md"
-                            onClick={(e) => e.stopPropagation()}
-                            title="Join WhatsApp Group"
+                      <div className="mb-4">
+                        {series.description ? (
+                          <div 
+                            className="text-gray-600 text-sm leading-relaxed overflow-hidden"
+                            style={{
+                              display: '-webkit-box',
+                              WebkitLineClamp: 3,
+                              WebkitBoxOrient: 'vertical',
+                              maxHeight: '4.5rem',
+                            }}
                           >
-                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
-                            </svg>
-                          </a>
+                            <DescriptionRenderer description={series.description} className="text-sm" />
+                          </div>
+                        ) : (
+                          <p className="text-gray-600 text-sm">Comprehensive test series for exam preparation</p>
                         )}
-                        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-800 hover:bg-gray-900 text-white transition-colors shadow-md cursor-pointer">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                          </svg>
-                        </div>
                       </div>
-                      
-                      {/* Course Details */}
-                      {series.targetClass && (
-                        <div className="mb-2 flex items-center gap-2 text-gray-600">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                          </svg>
-                          <span className="text-xs">For {series.targetClass}</span>
-                        </div>
-                      )}
-                      
-                      {(startDateStr || endDateStr) && (
-                        <div className="mb-3 flex items-center gap-2 text-gray-600">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          <span className="text-xs">
-                            {startDateStr && endDateStr 
-                              ? `Starts on ${startDateStr} Ends on ${endDateStr}`
-                              : startDateStr 
-                              ? `Starts on ${startDateStr}`
-                              : `Ends on ${endDateStr}`
-                            }
-                          </span>
-                        </div>
-                      )}
-                      
+
                       {series.testIds && series.testIds.length > 0 && (
-                        <div className="mb-4">
-                          <p className="text-xs text-gray-500">
-                            {series.testIds.length} Test{series.testIds.length !== 1 ? 's' : ''} included
-                          </p>
+                        <div className="mb-4 text-sm text-gray-500">
+                          {series.testIds.length} Test{series.testIds.length !== 1 ? 's' : ''} included
                         </div>
                       )}
 
                       {/* Price and Action Buttons */}
-                      <div className="border-t pt-4 mt-4">
+                      <div className="border-t border-gray-200 pt-4 mt-4">
                         <div className="mb-4">
-                          <div className="flex items-baseline gap-2 mb-1">
+                          <div className="flex items-baseline gap-2">
                             {!isFree && originalPrice > 0 && originalPrice > (series.price || 0) && (
-                              <span className="text-sm text-gray-500 line-through">
+                              <span className="text-sm text-gray-400 line-through">
                                 ₹{originalPrice.toLocaleString()}
                               </span>
                             )}
-                            <span className="text-2xl font-bold text-purple-600">
+                            <span className="text-2xl font-bold text-gray-900">
                               ₹{isFree ? "0" : (series.price || 0).toLocaleString()}
                             </span>
                           </div>
-                          {!isFree && (
-                            <p className="text-xs text-gray-500">(FOR FULL BATCH)</p>
-                          )}
                         </div>
                         <div className="flex gap-2">
                           <button
@@ -666,15 +752,15 @@ export default function Home() {
                               e.stopPropagation();
                               handleKnowMore(series.title);
                             }}
-                            className="flex-1 border-2 border-purple-600 text-purple-600 hover:bg-purple-50 py-2 rounded-lg font-semibold transition-all text-sm"
+                            className="flex-1 border-2 border-gray-300 text-gray-700 hover:border-[#ff6b35] hover:text-[#ff6b35] hover:bg-orange-50 py-2 rounded-lg font-semibold transition-all text-sm"
                           >
-                            EXPLORE
+                            View Details
                           </button>
                           <button
                             onClick={() => router.push("/dashboard")}
-                            className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg font-semibold transition-all text-sm"
+                            className="flex-1 bg-[#ff6b35] hover:bg-yellow-400 hover:text-gray-900 text-white py-2 rounded-lg font-semibold transition-all text-sm"
                           >
-                            {isFree ? "GET STARTED" : "BUY NOW"}
+                            {isFree ? "Get Started" : "Enroll Now"}
                           </button>
                         </div>
                       </div>
@@ -687,24 +773,25 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Call to Action Button */}
-      <div className="fixed bottom-8 right-8 z-20">
-        <button
-          onClick={() => router.push("/dashboard")}
-          className="bg-[#ff6b35] text-white px-6 py-3 rounded-lg shadow-2xl hover:bg-[#ff8555] transition-all transform hover:scale-105 font-semibold text-lg"
-        >
-          Explore Our Test Suite
-        </button>
-      </div>
-      
-      {/* Footer Logo */}
-      <div className="fixed bottom-8 left-8 z-20">
-        <div className="w-12 h-12 bg-black flex items-center justify-center rounded">
-          <span className="text-white text-xl font-bold">N</span>
+      {/* Footer */}
+      <footer className="bg-gradient-to-br from-white via-orange-50/30 to-white border-t border-gray-200 py-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-gray-900 mb-4 flex items-center justify-center gap-2">
+              <div className="w-8 h-8 bg-[#ff6b35] rounded-full flex items-center justify-center">
+                <span className="text-white font-bold">A</span>
+              </div>
+              <span>cad</span><span className="text-[#ff6b35]">XL</span>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">© 2024 AcadXL. All rights reserved.</p>
+            <div className="flex justify-center gap-6">
+              <a href="#" className="text-gray-600 hover:text-[#ff6b35] transition-colors text-sm">Privacy Policy</a>
+              <a href="#" className="text-gray-600 hover:text-[#ff6b35] transition-colors text-sm">Terms of Service</a>
+              <a href="#" className="text-gray-600 hover:text-[#ff6b35] transition-colors text-sm">Contact Us</a>
+            </div>
+          </div>
         </div>
-      </div>
-
+      </footer>
     </div>
   );
 }
-

@@ -13,6 +13,7 @@ import { getTestById } from "@/lib/db/tests";
 import { getUserTestResults } from "@/lib/db/testResults";
 import type { TestSeries } from "@/lib/types/testSeries";
 import type { Test } from "@/lib/types/test";
+import DescriptionRenderer from "@/components/DescriptionRenderer";
 import type { TestResult } from "@/lib/types/testResult";
 import DescriptionRenderer from "@/components/DescriptionRenderer";
 
@@ -106,7 +107,7 @@ export default function TestSeriesDetailsPage() {
         localStorage.removeItem("user_login_time");
       }
       await signOut(auth);
-      router.replace("/login");
+      router.replace("/");
     } catch (err) {
       console.error("[TestSeriesDetailsPage] Logout error:", err);
     }
@@ -263,7 +264,9 @@ export default function TestSeriesDetailsPage() {
                           {test.questions && <span>📝 {test.questions.length} Questions</span>}
                         </div>
                         {test.description && (
-                          <p className="text-sm text-gray-600 mt-2">{test.description}</p>
+                          <div className="text-sm text-gray-600 mt-2">
+                            <DescriptionRenderer description={test.description} className="text-sm" />
+                          </div>
                         )}
                       </div>
                       {isEnrolledInSeries && (() => {

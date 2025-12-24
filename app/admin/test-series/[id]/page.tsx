@@ -246,9 +246,9 @@ export default function ViewTestSeriesPage() {
                           )}
                         </div>
                         {test && test.description && (
-                          <p className="text-sm text-gray-600 mt-1 line-clamp-2">
-                            {test.description}
-                          </p>
+                          <div className="text-sm text-gray-600 mt-1 line-clamp-2">
+                            <DescriptionRenderer description={test.description} className="text-sm" />
+                          </div>
                         )}
                       </div>
                     </div>

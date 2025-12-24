@@ -16,13 +16,9 @@ export default function AdminSidebar({ onNavigate }: AdminSidebarProps) {
   const handleLogout = useCallback(async () => {
     console.log("[AdminSidebar] Logout initiated");
     try {
-      // Clear login time
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("user_login_time");
-      }
       await signOut(auth);
       console.log("[AdminSidebar] Sign out successful, redirecting");
-      router.replace("/login");
+      router.replace("/");
     } catch (err) {
       console.error("[AdminSidebar] Logout error:", err);
     }
@@ -37,7 +33,6 @@ export default function AdminSidebar({ onNavigate }: AdminSidebarProps) {
 
   const navItems = [
     { path: "/admin", label: "Dashboard", icon: "📊" },
-    { path: "/admin/students", label: "All Students", icon: "👥" },
     { path: "/admin/test-series", label: "Test Series", icon: "📚" },
     { path: "/admin/tests", label: "Tests", icon: "📝" },
     { path: "/admin/questions", label: "Questions", icon: "❓" },
