@@ -13,6 +13,7 @@ import type { Test } from "@/lib/types/test";
 import type { Question } from "@/lib/types/question";
 import type { TestQuestion } from "@/lib/types/test";
 import { Timestamp } from "firebase/firestore";
+import RichTextRenderer from "@/components/RichTextRenderer";
 
 interface QuestionWithTestData extends Question {
   testMarks: number;
@@ -611,9 +612,9 @@ export default function TestTakingPage() {
 
               {/* Question Text */}
               <div className="mb-4 w-full overflow-x-auto">
-                <div
-                  className="prose prose-sm max-w-none text-gray-900 question-content text-sm break-words"
-                  dangerouslySetInnerHTML={{ __html: currentQuestion.text }}
+                <RichTextRenderer 
+                  content={currentQuestion.text}
+                  className="text-gray-900 text-sm break-words"
                 />
               </div>
 
@@ -663,10 +664,12 @@ export default function TestTakingPage() {
                           <span className="font-medium text-gray-700 min-w-[20px] text-sm">
                             {optionLabel}.
                           </span>
-                          <div
-                            className="prose prose-sm max-w-none text-gray-900 flex-1 question-content text-sm break-words min-w-0"
-                            dangerouslySetInnerHTML={{ __html: option }}
-                          />
+                          <div className="flex-1 min-w-0">
+                            <RichTextRenderer 
+                              content={option}
+                              className="text-gray-900 text-sm break-words"
+                            />
+                          </div>
                         </label>
                       );
                     })}

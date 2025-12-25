@@ -138,7 +138,8 @@ export default function EditTestSeriesPage() {
 
       // Basic validation
       const sanitizedTitle = sanitizeInput(title).trim();
-      const sanitizedDescription = sanitizeInput(description).trim();
+      // Don't sanitize description - it contains HTML from RichTextEditor
+      const descriptionValue = description.trim();
       const priceValue = parseFloat(price);
 
       if (!sanitizedTitle) {
@@ -211,7 +212,7 @@ export default function EditTestSeriesPage() {
 
         const updates: Partial<TestSeriesInput> = {
           title: sanitizedTitle,
-          description: sanitizedDescription,
+          description: descriptionValue,
           testIds: Array.from(selectedTestIds),
           price: priceValue,
           isPublished: isPublished,

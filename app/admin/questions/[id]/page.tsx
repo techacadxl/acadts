@@ -7,6 +7,7 @@ import { useUserProfile } from "@/lib/hooks/useUserProfile";
 import { getQuestionById } from "@/lib/db/questions";
 import type { Question } from "@/lib/types/question";
 import Link from "next/link";
+import RichTextRenderer from "@/components/RichTextRenderer";
 
 export default function ViewQuestionPage() {
   const router = useRouter();
@@ -232,10 +233,9 @@ export default function ViewQuestionPage() {
           {/* Question Text (HTML content) */}
           <div>
             <p className="text-xs text-gray-500 mb-2">Question</p>
-            <div 
-              className="text-sm text-gray-900 bg-gray-50 rounded p-4 prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: question.text }}
-            />
+            <div className="text-sm text-gray-900 bg-gray-50 rounded p-4">
+              <RichTextRenderer content={question.text} />
+            </div>
           </div>
 
           {/* Options (for MCQs) */}
@@ -260,10 +260,9 @@ export default function ViewQuestionPage() {
                         <span className="text-sm font-medium text-gray-600 min-w-[2rem]">
                           {String.fromCharCode(65 + index)}.
                         </span>
-                        <span 
-                          className="text-sm text-gray-900 flex-1 prose prose-sm max-w-none"
-                          dangerouslySetInnerHTML={{ __html: option }}
-                        />
+                        <div className="text-sm text-gray-900 flex-1">
+                          <RichTextRenderer content={option} />
+                        </div>
                         {isCorrect && (
                           <span className="text-xs font-medium text-green-700">
                             ✓ Correct
@@ -290,10 +289,9 @@ export default function ViewQuestionPage() {
           {question.explanation && (
             <div>
               <p className="text-xs text-gray-500 mb-2">Explanation</p>
-              <div 
-                className="text-sm text-gray-700 bg-blue-50 border border-blue-200 rounded p-4 prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: question.explanation }}
-              />
+              <div className="text-sm text-gray-700 bg-blue-50 border border-blue-200 rounded p-4">
+                <RichTextRenderer content={question.explanation} />
+              </div>
             </div>
           )}
 

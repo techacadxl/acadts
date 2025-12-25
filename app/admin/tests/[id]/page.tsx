@@ -11,6 +11,7 @@ import { getQuestionById, listQuestions } from "@/lib/db/questions";
 import type { Test } from "@/lib/types/test";
 import type { Question } from "@/lib/types/question";
 import type { TestSection, TestSubsection, TestQuestion } from "@/lib/types/test";
+import RichTextRenderer from "@/components/RichTextRenderer";
 
 interface QuestionWithTestData extends Question {
   testMarks: number;
@@ -580,12 +581,9 @@ export default function ViewTestPage() {
                                       : "Numerical"}
                                   </span>
                                 </div>
-                                <div
-                                  className="text-sm text-gray-700 line-clamp-3 question-content"
-                                  dangerouslySetInnerHTML={{
-                                    __html: question.text,
-                                  }}
-                                />
+                                <div className="text-sm text-gray-700 line-clamp-3">
+                                  <RichTextRenderer content={question.text} />
+                                </div>
                               </div>
                               <div className="ml-4 flex flex-col items-end gap-2">
                                 <div className="text-right">

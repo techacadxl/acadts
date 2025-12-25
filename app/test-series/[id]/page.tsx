@@ -9,6 +9,7 @@ import type { TestSeries } from "@/lib/types/testSeries";
 import type { Test } from "@/lib/types/test";
 import Link from "next/link";
 import DescriptionRenderer from "@/components/DescriptionRenderer";
+import RichTextRenderer from "@/components/RichTextRenderer";
 
 export default function TestSeriesDetailsPage() {
   const router = useRouter();
@@ -150,7 +151,7 @@ export default function TestSeriesDetailsPage() {
               {/* Description */}
               <div className="mb-8">
                 <h2 className="text-2xl font-semibold text-gray-900 mb-4">About the Test Series</h2>
-                <DescriptionRenderer description={testSeries.description || ""} />
+                <RichTextRenderer content={testSeries.description || ""} />
               </div>
 
               {/* Course Details */}

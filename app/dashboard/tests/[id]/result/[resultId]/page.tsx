@@ -12,6 +12,7 @@ import type { TestResult } from "@/lib/types/testResult";
 import type { Test } from "@/lib/types/test";
 import type { Question } from "@/lib/types/question";
 import DescriptionRenderer from "@/components/DescriptionRenderer";
+import RichTextRenderer from "@/components/RichTextRenderer";
 
 interface QuestionWithResult extends Question {
   result: {
@@ -442,9 +443,9 @@ export default function TestResultPage() {
 
                   {/* Question Text */}
                   <div className="mb-4">
-                    <div
-                      className="prose prose-sm max-w-none text-gray-900 question-content"
-                      dangerouslySetInnerHTML={{ __html: question.text }}
+                    <RichTextRenderer 
+                      content={question.text}
+                      className="text-gray-900"
                     />
                   </div>
 
@@ -487,10 +488,12 @@ export default function TestResultPage() {
                                 <span className="font-medium text-gray-700 min-w-[20px]">
                                   {optionLabel}.
                                 </span>
-                                <div
-                                  className="prose prose-sm max-w-none text-gray-900 question-content flex-1"
-                                  dangerouslySetInnerHTML={{ __html: option }}
-                                />
+                                <div className="flex-1">
+                                  <RichTextRenderer 
+                                    content={option}
+                                    className="text-gray-900"
+                                  />
+                                </div>
                                 {isCorrectOption && (
                                   <span className="text-green-700 font-semibold text-xs">✓ Correct</span>
                                 )}
@@ -531,9 +534,9 @@ export default function TestResultPage() {
                   {question.explanation && (
                     <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
                       <div className="text-sm font-semibold text-blue-900 mb-1">Explanation:</div>
-                      <div
-                        className="prose prose-sm max-w-none text-blue-800 question-content"
-                        dangerouslySetInnerHTML={{ __html: question.explanation }}
+                      <RichTextRenderer 
+                        content={question.explanation}
+                        className="text-blue-800"
                       />
                     </div>
                   )}

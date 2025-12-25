@@ -14,8 +14,8 @@ import { getUserTestResults } from "@/lib/db/testResults";
 import type { TestSeries } from "@/lib/types/testSeries";
 import type { Test } from "@/lib/types/test";
 import DescriptionRenderer from "@/components/DescriptionRenderer";
+import RichTextRenderer from "@/components/RichTextRenderer";
 import type { TestResult } from "@/lib/types/testResult";
-import DescriptionRenderer from "@/components/DescriptionRenderer";
 
 export default function TestSeriesDetailsPage() {
   const router = useRouter();
@@ -240,7 +240,7 @@ export default function TestSeriesDetailsPage() {
             {/* Description */}
             <div className="mb-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-3">Description</h2>
-              <DescriptionRenderer description={testSeries.description || ""} />
+              <RichTextRenderer content={testSeries.description || ""} />
             </div>
 
             {/* Tests Included */}
