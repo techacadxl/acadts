@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import type { TestSeries, TestSeriesDoc, TestSeriesInput } from "@/lib/types/testSeries";
+import { cache, cacheKeys } from "@/lib/utils/cache";
 
 const TEST_SERIES_COLLECTION = "testSeries";
 
@@ -62,6 +63,9 @@ export async function createTestSeries(
 
   try {
     const docRef = await addDoc(testSeriesCollectionRef(), docData);
+    // Invalidate cache
+    cache.invalidatePattern("^testSeries:");
+    cache.invalidate(cacheKeys.publishedTestSeries());
     console.log("[TestSeries DB] TestSeries created with id:", docRef.id);
     return docRef.id;
   } catch (error) {
@@ -80,6 +84,14 @@ export async function getTestSeriesById(id: string): Promise<TestSeries | null> 
     throw new Error("TestSeries id is required and must be a non-empty string");
   }
 
+  // Check cache first
+  const cacheKey = cacheKeys.testSeriesById(id);
+  const cached = cache.get<TestSeries>(cacheKey);
+  if (cached) {
+    console.log("[TestSeries DB] TestSeries loaded from cache:", id);
+    return cached;
+  }
+
   const testSeriesRef = doc(db, TEST_SERIES_COLLECTION, id);
   try {
     const snap = await getDoc(testSeriesRef);
@@ -88,6 +100,8 @@ export async function getTestSeriesById(id: string): Promise<TestSeries | null> 
       return null;
     }
     const testSeries = mapTestSeriesDoc(snap);
+    // Cache for 10 minutes
+    cache.set(cacheKey, testSeries, 10 * 60 * 1000);
     console.log("[TestSeries DB] TestSeries loaded:", { id: testSeries.id });
     return testSeries;
   } catch (error) {
@@ -162,6 +176,10 @@ export async function updateTestSeries(
 
   try {
     await updateDoc(testSeriesRef, updateData);
+    // Invalidate cache
+    cache.invalidate(cacheKeys.testSeriesById(id));
+    cache.invalidatePattern("^testSeries:");
+    cache.invalidate(cacheKeys.publishedTestSeries());
     console.log("[TestSeries DB] TestSeries updated successfully");
   } catch (error) {
     const dbError =
@@ -182,6 +200,10 @@ export async function deleteTestSeries(id: string): Promise<void> {
   const testSeriesRef = doc(db, TEST_SERIES_COLLECTION, id);
   try {
     await deleteDoc(testSeriesRef);
+    // Invalidate cache
+    cache.invalidate(cacheKeys.testSeriesById(id));
+    cache.invalidatePattern("^testSeries:");
+    cache.invalidate(cacheKeys.publishedTestSeries());
     console.log("[TestSeries DB] TestSeries deleted successfully");
   } catch (error) {
     const dbError =
@@ -207,6 +229,10 @@ export async function toggleTestSeriesPublishStatus(id: string, isPublished: boo
 
   try {
     await updateDoc(testSeriesRef, updateData);
+    // Invalidate cache
+    cache.invalidate(cacheKeys.testSeriesById(id));
+    cache.invalidatePattern("^testSeries:");
+    cache.invalidate(cacheKeys.publishedTestSeries());
     console.log("[TestSeries DB] TestSeries publish status updated:", isPublished);
   } catch (error) {
     const dbError =
@@ -220,6 +246,15 @@ export async function toggleTestSeriesPublishStatus(id: string, isPublished: boo
 
 export async function listPublishedTestSeries(): Promise<TestSeries[]> {
   console.log("[TestSeries DB] listPublishedTestSeries called");
+  
+  // Check cache first
+  const cacheKey = cacheKeys.publishedTestSeries();
+  const cached = cache.get<TestSeries[]>(cacheKey);
+  if (cached) {
+    console.log("[TestSeries DB] Published test series loaded from cache");
+    return cached;
+  }
+
   try {
     // Try with orderBy and where clause
     const qRef = query(
@@ -231,6 +266,8 @@ export async function listPublishedTestSeries(): Promise<TestSeries[]> {
     const testSeries: TestSeries[] = snapshot.docs
       .map((docSnap) => mapTestSeriesDoc(docSnap))
       .filter((series) => series.isPublished === true);
+    // Cache for 5 minutes
+    cache.set(cacheKey, testSeries, 5 * 60 * 1000);
     console.log("[TestSeries DB] listPublishedTestSeries loaded count:", testSeries.length);
     return testSeries;
   } catch (error) {

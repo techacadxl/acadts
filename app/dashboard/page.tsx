@@ -4,7 +4,7 @@
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useMemo, memo } from "react";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import { getAvailableTestSeries, getUserEnrollments, enrollInTestSeries, isEnrolled } from "@/lib/db/students";
@@ -14,7 +14,12 @@ import { getTestById } from "@/lib/db/tests";
 import type { Test } from "@/lib/types/test";
 import { getUserTestResults, getUserTestResult } from "@/lib/db/testResults";
 import type { TestResult } from "@/lib/types/testResult";
-import DescriptionRenderer from "@/components/DescriptionRenderer";
+import dynamic from "next/dynamic";
+
+// Lazy load DescriptionRenderer for better performance
+const DescriptionRenderer = dynamic(() => import("@/components/DescriptionRenderer"), {
+  loading: () => <span className="text-sm text-gray-600">Loading...</span>,
+});
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -71,7 +76,7 @@ export default function DashboardPage() {
         setEnrolledSeries(enrolled);
         setTestResults(results);
         
-        // Create a map of testId -> TestResult for quick lookup
+        // Create a map of testId -> TestResult for quick lookup (memoized)
         const attemptMap = new Map<string, TestResult>();
         results.forEach((result) => {
           attemptMap.set(result.testId, result);
@@ -130,15 +135,35 @@ export default function DashboardPage() {
     if (!user) return;
     setEnrollingId(testSeriesId);
     try {
-      await enrollInTestSeries(user.uid, testSeriesId);
-      // Reload enrollments
-      const updated = await getUserEnrollments(user.uid);
-      setEnrolledSeries(updated);
-      // Remove from available list (whether free or paid)
-      setAvailableSeries((prev) => prev.filter((s) => s.id !== testSeriesId));
-      // Show success message
+      // Get series info before optimistic update
       const series = availableSeries.find((s) => s.id === testSeriesId);
       const isFree = !series?.price || series.price === 0;
+      
+      await enrollInTestSeries(user.uid, testSeriesId);
+      
+      // Optimistic update - update UI immediately
+      if (series) {
+        // Remove from available list immediately
+        setAvailableSeries((prev) => prev.filter((s) => s.id !== testSeriesId));
+        // Add to enrolled list optimistically
+        setEnrolledSeries((prev) => [
+          ...prev,
+          {
+            id: `temp-${Date.now()}`,
+            userId: user.uid,
+            testSeriesId: series.id,
+            enrolledAt: { toDate: () => new Date() } as any,
+            status: "active" as const,
+            testSeries: series,
+          },
+        ]);
+      }
+      
+      // Reload enrollments in background to ensure consistency
+      const updated = await getUserEnrollments(user.uid);
+      setEnrolledSeries(updated);
+      
+      // Show success message
       alert(
         isFree
           ? "Successfully enrolled in test series! You now have access to all tests."

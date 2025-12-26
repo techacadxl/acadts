@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import type { TestResult, TestResultDoc, TestResultInput } from "@/lib/types/testResult";
+import { cache, cacheKeys } from "@/lib/utils/cache";
 
 const TEST_RESULTS_COLLECTION = "testResults";
 
@@ -59,6 +60,10 @@ export async function createTestResult(
 
   try {
     const docRef = await addDoc(testResultsCollectionRef(), docData);
+    // Invalidate cache for user's test results
+    if (input.userId) {
+      cache.invalidate(cacheKeys.testResults(input.userId));
+    }
     console.log("[TestResults DB] Test result created with id:", docRef.id);
     return docRef.id;
   } catch (error) {
@@ -115,6 +120,14 @@ export async function getUserTestResults(
     return [];
   }
 
+  // Check cache first
+  const cacheKey = cacheKeys.testResults(userId);
+  const cached = cache.get<TestResult[]>(cacheKey);
+  if (cached) {
+    console.log("[TestResults DB] Test results loaded from cache");
+    return cached;
+  }
+
   try {
     const q = query(
       testResultsCollectionRef(),
@@ -122,7 +135,10 @@ export async function getUserTestResults(
     );
     const snapshot = await getDocs(q);
 
-    return snapshot.docs.map((doc) => mapTestResultDoc(doc));
+    const results = snapshot.docs.map((doc) => mapTestResultDoc(doc));
+    // Cache for 2 minutes
+    cache.set(cacheKey, results, 2 * 60 * 1000);
+    return results;
   } catch (error) {
     console.error("[TestResults DB] Error getting user test results:", error);
     return [];

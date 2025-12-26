@@ -7,12 +7,15 @@ import {
   query,
   where,
   orderBy,
+  limit,
+  startAfter,
   addDoc,
   updateDoc,
   deleteDoc,
   serverTimestamp,
   type DocumentSnapshot,
   type QueryDocumentSnapshot,
+  type QueryConstraint,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import type {
@@ -22,6 +25,7 @@ import type {
   DifficultyLevel,
   QuestionType,
 } from "@/lib/types/question";
+import { cache, cacheKeys } from "@/lib/utils/cache";
 
 const QUESTIONS_COLLECTION = "questions";
 
@@ -82,6 +86,8 @@ export async function createQuestion(
 
   try {
     const docRef = await addDoc(questionsCollectionRef(), docData);
+    // Invalidate questions cache
+    cache.invalidatePattern("^questions:");
     console.log("[Questions DB] Question created with id:", docRef.id);
     return docRef.id;
   } catch (error) {
@@ -122,6 +128,9 @@ export async function updateQuestion(
 
   try {
     await updateDoc(questionRef, updateData);
+    // Invalidate cache for this question and list
+    cache.invalidate(cacheKeys.question(id));
+    cache.invalidatePattern("^questions:");
     console.log("[Questions DB] Question updated successfully");
   } catch (error) {
     const dbError =
@@ -150,6 +159,9 @@ export async function deleteQuestion(id: string): Promise<void> {
 
   try {
     await deleteDoc(questionRef);
+    // Invalidate cache for this question and list
+    cache.invalidate(cacheKeys.question(id));
+    cache.invalidatePattern("^questions:");
     console.log("[Questions DB] Question deleted successfully");
   } catch (error) {
     const dbError =
@@ -174,6 +186,14 @@ export async function getQuestionById(id: string): Promise<Question | null> {
     throw error;
   }
 
+  // Check cache first
+  const cacheKey = cacheKeys.question(id);
+  const cached = cache.get<Question>(cacheKey);
+  if (cached) {
+    console.log("[Questions DB] Question loaded from cache:", id);
+    return cached;
+  }
+
   const questionRef = doc(db, QUESTIONS_COLLECTION, id);
 
   try {
@@ -184,6 +204,8 @@ export async function getQuestionById(id: string): Promise<Question | null> {
     }
 
     const question = mapQuestionDoc(snap);
+    // Cache for 10 minutes
+    cache.set(cacheKey, question, 10 * 60 * 1000);
     console.log("[Questions DB] Question loaded:", { id: question.id });
     return question;
   } catch (error) {
@@ -203,18 +225,48 @@ export interface ListQuestionsParams {
   subtopic?: string;
   difficulty?: DifficultyLevel;
   type?: QuestionType;
+  limit?: number;
+  lastDoc?: QueryDocumentSnapshot;
+}
+
+export interface PaginatedQuestionsResult {
+  questions: Question[];
+  lastDoc: QueryDocumentSnapshot | null;
+  hasMore: boolean;
 }
 
 /**
- * List questions with optional filters
+ * List questions with optional filters and pagination
  */
 export async function listQuestions(
   params: ListQuestionsParams = {}
 ): Promise<Question[]> {
-  console.log("[Questions DB] listQuestions called with params:", params);
+  const result = await listQuestionsPaginated(params);
+  return result.questions;
+}
+
+/**
+ * List questions with pagination support
+ */
+export async function listQuestionsPaginated(
+  params: ListQuestionsParams = {}
+): Promise<PaginatedQuestionsResult> {
+  console.log("[Questions DB] listQuestionsPaginated called with params:", params);
+
+  const pageLimit = params.limit || 50; // Default 50 items per page
+  const cacheKey = cacheKeys.questions(params);
+
+  // Check cache (only for first page without pagination cursor)
+  if (!params.lastDoc) {
+    const cached = cache.get<PaginatedQuestionsResult>(cacheKey);
+    if (cached) {
+      console.log("[Questions DB] Questions loaded from cache");
+      return cached;
+    }
+  }
 
   try {
-    const constraints = [];
+    const constraints: QueryConstraint[] = [];
     const hasFilters = !!(params.subject || params.chapter || params.topic || params.subtopic || params.difficulty || params.type);
 
     if (params.subject) {
@@ -236,20 +288,32 @@ export async function listQuestions(
       constraints.push(where("type", "==", params.type));
     }
 
+    // Add pagination
+    constraints.push(limit(pageLimit + 1)); // Fetch one extra to check if there's more
+    if (params.lastDoc) {
+      constraints.push(startAfter(params.lastDoc));
+    }
+
     // Only use orderBy when there are no filters to avoid composite index requirement
-    // When filters are applied, we'll sort client-side
     let qRef;
     if (hasFilters) {
       // No orderBy when filters are present - sort client-side instead
       qRef = query(questionsCollectionRef(), ...constraints);
     } else {
       // Use orderBy only when no filters (no composite index needed)
-      const baseConstraints = [orderBy("createdAt", "desc")];
-      qRef = query(questionsCollectionRef(), ...baseConstraints);
+      constraints.unshift(orderBy("createdAt", "desc"));
+      qRef = query(questionsCollectionRef(), ...constraints);
     }
 
     const snapshot = await getDocs(qRef);
-    let questions: Question[] = snapshot.docs.map((docSnap) =>
+    const docs = snapshot.docs;
+    const hasMore = docs.length > pageLimit;
+    
+    // If we fetched extra, remove it
+    const questionsToReturn = hasMore ? docs.slice(0, pageLimit) : docs;
+    const lastDoc = questionsToReturn.length > 0 ? questionsToReturn[questionsToReturn.length - 1] : null;
+
+    let questions: Question[] = questionsToReturn.map((docSnap) =>
       mapQuestionDoc(docSnap)
     );
 
@@ -262,8 +326,19 @@ export async function listQuestions(
       });
     }
 
-    console.log("[Questions DB] listQuestions loaded count:", questions.length);
-    return questions;
+    const result: PaginatedQuestionsResult = {
+      questions,
+      lastDoc: lastDoc as QueryDocumentSnapshot | null,
+      hasMore,
+    };
+
+    // Cache first page only (no lastDoc)
+    if (!params.lastDoc) {
+      cache.set(cacheKey, result, 5 * 60 * 1000); // 5 minutes
+    }
+
+    console.log("[Questions DB] listQuestionsPaginated loaded count:", questions.length, "hasMore:", hasMore);
+    return result;
   } catch (error) {
     const dbError =
       error instanceof Error

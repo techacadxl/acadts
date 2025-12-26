@@ -15,6 +15,7 @@ import { db } from "@/lib/firebase/client";
 import type { TestSeries } from "@/lib/types/testSeries";
 import { getTestSeriesById, listTestSeries } from "./testSeries";
 import { getTestById } from "./tests";
+import { cache, cacheKeys } from "@/lib/utils/cache";
 
 const ENROLLMENTS_COLLECTION = "enrollments";
 
@@ -58,6 +59,8 @@ export async function enrollInTestSeries(
       enrolledAt: serverTimestamp(),
       status: "active",
     });
+    // Invalidate cache
+    cache.invalidate(cacheKeys.enrollments(userId));
     console.log("[Students DB] Enrollment created:", docRef.id);
     return docRef.id;
   } catch (error) {
@@ -110,6 +113,14 @@ export async function getUserEnrollments(
 ): Promise<EnrollmentWithSeries[]> {
   console.log("[Students DB] getUserEnrollments called:", userId);
 
+  // Check cache first
+  const cacheKey = cacheKeys.enrollments(userId);
+  const cached = cache.get<EnrollmentWithSeries[]>(cacheKey);
+  if (cached) {
+    console.log("[Students DB] Enrollments loaded from cache");
+    return cached;
+  }
+
   try {
     const q = query(
       collection(db, ENROLLMENTS_COLLECTION),
@@ -118,29 +129,39 @@ export async function getUserEnrollments(
     );
     const snapshot = await getDocs(q);
     
-    const enrollments: EnrollmentWithSeries[] = await Promise.all(
-      snapshot.docs.map(async (docSnap) => {
-        const data = docSnap.data();
-        const enrollment: EnrollmentWithSeries = {
-          id: docSnap.id,
-          userId: data.userId,
-          testSeriesId: data.testSeriesId,
-          enrolledAt: data.enrolledAt,
-          status: data.status,
-        };
-
-        // Fetch test series details
+    // Batch fetch all test series IDs first
+    const testSeriesIds = snapshot.docs.map((docSnap) => docSnap.data().testSeriesId);
+    const testSeriesMap = new Map<string, TestSeries>();
+    
+    // Fetch all test series in parallel
+    await Promise.all(
+      testSeriesIds.map(async (testSeriesId) => {
         try {
-          const testSeries = await getTestSeriesById(data.testSeriesId);
-          enrollment.testSeries = testSeries || undefined;
+          const testSeries = await getTestSeriesById(testSeriesId);
+          if (testSeries) {
+            testSeriesMap.set(testSeriesId, testSeries);
+          }
         } catch (err) {
           console.error("[Students DB] Error fetching test series:", err);
         }
-
-        return enrollment;
       })
     );
+    
+    const enrollments: EnrollmentWithSeries[] = snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      const enrollment: EnrollmentWithSeries = {
+        id: docSnap.id,
+        userId: data.userId,
+        testSeriesId: data.testSeriesId,
+        enrolledAt: data.enrolledAt,
+        status: data.status,
+        testSeries: testSeriesMap.get(data.testSeriesId),
+      };
+      return enrollment;
+    });
 
+    // Cache for 2 minutes (enrollments change more frequently)
+    cache.set(cacheKey, enrollments, 2 * 60 * 1000);
     console.log("[Students DB] User enrollments loaded:", enrollments.length);
     return enrollments;
   } catch (error) {
