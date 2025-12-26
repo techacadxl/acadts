@@ -1,6 +1,6 @@
 // src/lib/firebase/client.ts
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
-import { getAuth, Auth, setPersistence, browserLocalPersistence } from "firebase/auth";
+import { getAuth, Auth, setPersistence, browserLocalPersistence, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore, Firestore } from "firebase/firestore";
 import { getStorage, FirebaseStorage } from "firebase/storage";
 
@@ -61,4 +61,11 @@ setPersistence(auth, browserLocalPersistence).catch((error) => {
 
 export const db: Firestore = getFirestore(app);
 export const storage: FirebaseStorage = getStorage(app);
+
+// Google Auth Provider
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: "select_account",
+});
+
 console.log("[Firebase Client] Firebase services initialized (auth, firestore, storage)");

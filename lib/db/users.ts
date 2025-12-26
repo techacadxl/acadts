@@ -5,6 +5,7 @@ import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 export type AppUser = {
   uid: string;
   email: string | null;
+  phoneNumber: string | null;
   displayName: string | null;
   createdAt?: any;
 };
@@ -18,6 +19,7 @@ export async function createUserDocument(user: AppUser) {
     userRef,
     {
       email: user.email,
+      phoneNumber: user.phoneNumber,
       displayName: user.displayName,
       createdAt: serverTimestamp(),
     },
