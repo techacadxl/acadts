@@ -11,10 +11,13 @@ import { getAvailableTestSeries, getUserEnrollments, enrollInTestSeries, isEnrol
 import type { TestSeries } from "@/lib/types/testSeries";
 import type { EnrollmentWithSeries } from "@/lib/db/students";
 import { getTestById } from "@/lib/db/tests";
+import { getTestSeriesById } from "@/lib/db/testSeries";
 import type { Test } from "@/lib/types/test";
 import { getUserTestResults, getUserTestResult } from "@/lib/db/testResults";
 import type { TestResult } from "@/lib/types/testResult";
 import dynamic from "next/dynamic";
+import { CardSkeleton, ListSkeleton } from "@/components/LoadingSkeleton";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 // Lazy load DescriptionRenderer for better performance
 const DescriptionRenderer = dynamic(() => import("@/components/DescriptionRenderer"), {
@@ -29,7 +32,7 @@ export default function DashboardPage() {
   const [enrolledSeries, setEnrolledSeries] = useState<EnrollmentWithSeries[]>([]);
   const [loadingSeries, setLoadingSeries] = useState(true);
   const [enrollingId, setEnrollingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"available" | "enrolled" | "attempts">("available");
+  const [activeTab, setActiveTab] = useState<"available" | "enrolled" | "attempts" | "reports">("available");
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
   const [seriesTests, setSeriesTests] = useState<Test[]>([]);
   const [loadingTests, setLoadingTests] = useState(false);
@@ -100,28 +103,58 @@ export default function DashboardPage() {
     const loadTests = async () => {
       setLoadingTests(true);
       try {
-        const enrollment = enrolledSeries.find((e) => e.testSeriesId === selectedSeriesId);
-        if (!enrollment?.testSeries?.testIds) {
+        // Fetch fresh test series data instead of using cached enrollment data
+        // This ensures students see newly added tests immediately
+        // Bypass cache to get the latest data
+        const freshTestSeries = await getTestSeriesById(selectedSeriesId, true);
+        
+        console.log("[DashboardPage] Loaded test series:", {
+          id: selectedSeriesId,
+          title: freshTestSeries?.title,
+          testIds: freshTestSeries?.testIds,
+          testIdsLength: freshTestSeries?.testIds?.length,
+        });
+        
+        if (!freshTestSeries?.testIds || freshTestSeries.testIds.length === 0) {
+          console.warn("[DashboardPage] No testIds found in test series:", selectedSeriesId);
           setSeriesTests([]);
           return;
         }
 
+        console.log("[DashboardPage] Loading tests for IDs:", freshTestSeries.testIds);
         const tests = await Promise.all(
-          enrollment.testSeries.testIds.map(async (testId) => {
-            const test = await getTestById(testId);
-            return test;
+          freshTestSeries.testIds.map(async (testId) => {
+            try {
+              const test = await getTestById(testId);
+              if (!test) {
+                console.warn("[DashboardPage] Test not found for ID:", testId);
+              }
+              return test;
+            } catch (err) {
+              console.error("[DashboardPage] Error loading test:", testId, err);
+              return null;
+            }
           })
         );
-        setSeriesTests(tests.filter((t): t is Test => t !== null));
+        
+        const validTests = tests.filter((t): t is Test => t !== null);
+        console.log("[DashboardPage] Loaded tests:", {
+          total: tests.length,
+          valid: validTests.length,
+          testTitles: validTests.map(t => t.title),
+        });
+        
+        setSeriesTests(validTests);
       } catch (error) {
         console.error("[DashboardPage] Error loading tests:", error);
+        setSeriesTests([]);
       } finally {
         setLoadingTests(false);
       }
     };
 
     loadTests();
-  }, [selectedSeriesId, enrolledSeries]);
+  }, [selectedSeriesId, user]);
 
   // Redirect admins to admin panel
   useEffect(() => {
@@ -180,22 +213,14 @@ export default function DashboardPage() {
 
   // Wait for BOTH auth + role to load
   if (authLoading || profileLoading) {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-white">
-        <p className="text-gray-900 text-lg">Checking session...</p>
-      </main>
-    );
+    return <LoadingSpinner fullScreen text="Checking session..." />;
   }
 
   if (!user) {
     if (typeof window !== "undefined") {
       router.replace("/login");
     }
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-white">
-        <p className="text-gray-900 text-lg">Redirecting...</p>
-      </main>
-    );
+    return <LoadingSpinner fullScreen text="Redirecting..." />;
   }
 
   const displayName = user.displayName || user.email || "User";
@@ -260,6 +285,19 @@ export default function DashboardPage() {
           >
             My Attempts ({testResults.length})
           </button>
+          <button
+            onClick={() => {
+              setActiveTab("reports");
+              setSelectedSeriesId(null);
+            }}
+            className={`px-6 py-3 font-semibold transition-colors ${
+              activeTab === "reports"
+                ? "text-[#ff6b35] border-b-2 border-[#ff6b35]"
+                : "text-gray-600 hover:text-[#ff6b35]"
+            }`}
+          >
+            Reports
+          </button>
         </div>
 
         {/* Available Test Series */}
@@ -267,8 +305,17 @@ export default function DashboardPage() {
           <div>
             <h2 className="text-3xl font-bold text-gray-900 mb-6">Available Test Series</h2>
             {loadingSeries ? (
-              <div className="text-center py-12">
-                <p className="text-gray-600 text-lg">Loading test series...</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="bg-white rounded-lg shadow-xl overflow-hidden">
+                    <div className="p-6">
+                      <div className="h-6 w-24 bg-gray-200 rounded animate-pulse mb-4"></div>
+                      <div className="h-4 w-full bg-gray-200 rounded animate-pulse mb-2"></div>
+                      <div className="h-4 w-3/4 bg-gray-200 rounded animate-pulse mb-4"></div>
+                      <div className="h-10 w-full bg-gray-200 rounded animate-pulse"></div>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : availableSeries.length === 0 ? (
               <div className="text-center py-12">
@@ -416,7 +463,17 @@ export default function DashboardPage() {
                         {isSelected && (
                           <div className="mt-6 pt-6 border-t border-gray-200">
                             {loadingTests ? (
-                              <p className="text-center text-gray-600 py-4">Loading tests...</p>
+                              <div className="space-y-3">
+                                {Array.from({ length: 3 }).map((_, i) => (
+                                  <div key={i} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                                    <div className="flex-1">
+                                      <div className="h-5 w-48 bg-gray-200 rounded animate-pulse mb-2"></div>
+                                      <div className="h-4 w-32 bg-gray-200 rounded animate-pulse"></div>
+                                    </div>
+                                    <div className="h-10 w-24 bg-gray-200 rounded animate-pulse"></div>
+                                  </div>
+                                ))}
+                              </div>
                             ) : seriesTests.length === 0 ? (
                               <p className="text-center text-gray-600 py-4">No tests available in this series.</p>
                             ) : (
@@ -480,9 +537,7 @@ export default function DashboardPage() {
           <div>
             <h2 className="text-3xl font-bold text-gray-900 mb-6">My Test Attempts</h2>
             {loadingResults ? (
-              <div className="text-center py-12">
-                <p className="text-gray-600 text-lg">Loading attempts...</p>
-              </div>
+              <ListSkeleton items={5} />
             ) : testResults.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-gray-600 text-lg">You haven't attempted any tests yet.</p>
@@ -576,6 +631,133 @@ export default function DashboardPage() {
                   })}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Reports Tab */}
+        {activeTab === "reports" && (
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-6">Reports & Analytics</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              {/* Combined Report Card */}
+              <div
+                onClick={() => router.push("/dashboard/reports/combined")}
+                className="bg-white rounded-lg shadow-xl overflow-hidden hover:shadow-2xl transition-all transform hover:scale-105 cursor-pointer border-2 border-[#ff6b35]"
+              >
+                <div className="p-6">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="text-4xl">📊</div>
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">Combined Report</h3>
+                      <p className="text-sm text-gray-600">Overall progress across all tests</p>
+                    </div>
+                  </div>
+                  <ul className="space-y-2 text-sm text-gray-600 mb-4">
+                    <li className="flex items-center gap-2">
+                      <span className="text-[#ff6b35]">✓</span>
+                      Overall performance trends
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="text-[#ff6b35]">✓</span>
+                      Subject-wise analysis
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="text-[#ff6b35]">✓</span>
+                      Accuracy & speed insights
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="text-[#ff6b35]">✓</span>
+                      Strengths & weaknesses
+                    </li>
+                  </ul>
+                  <button className="w-full bg-[#ff6b35] hover:bg-yellow-400 text-white py-2 rounded-lg font-semibold transition-all">
+                    View Combined Report →
+                  </button>
+                </div>
+              </div>
+
+              {/* Test-wise Report Card */}
+              <div
+                onClick={() => router.push("/dashboard/reports/testwise")}
+                className="bg-white rounded-lg shadow-xl overflow-hidden hover:shadow-2xl transition-all transform hover:scale-105 cursor-pointer border-2 border-[#ff6b35]"
+              >
+                <div className="p-6">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="text-4xl">📈</div>
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">Test-wise Report</h3>
+                      <p className="text-sm text-gray-600">Detailed analysis for each test</p>
+                    </div>
+                  </div>
+                  <ul className="space-y-2 text-sm text-gray-600 mb-4">
+                    <li className="flex items-center gap-2">
+                      <span className="text-[#ff6b35]">✓</span>
+                      Individual test performance
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="text-[#ff6b35]">✓</span>
+                      Topic-wise breakdown
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="text-[#ff6b35]">✓</span>
+                      Question-level analysis
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="text-[#ff6b35]">✓</span>
+                      Improvement suggestions
+                    </li>
+                  </ul>
+                  <button className="w-full bg-[#ff6b35] hover:bg-yellow-400 text-white py-2 rounded-lg font-semibold transition-all">
+                    View Test-wise Report →
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Stats */}
+            <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Statistics</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-[#ff6b35]">{testResults.length}</p>
+                  <p className="text-sm text-gray-600">Total Attempts</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-green-600">
+                    {testResults.length > 0
+                      ? Math.round(
+                          (testResults.filter(
+                            (r) => (r.totalMarksObtained / r.totalMarksPossible) * 100 >= 70
+                          ).length /
+                            testResults.length) *
+                            100
+                        )
+                      : 0}
+                    %
+                  </p>
+                  <p className="text-sm text-gray-600">Above 70%</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-blue-600">
+                    {testResults.length > 0
+                      ? (
+                          testResults.reduce(
+                            (sum, r) => sum + (r.totalMarksObtained / r.totalMarksPossible) * 100,
+                            0
+                          ) / testResults.length
+                        ).toFixed(1)
+                      : "0"}
+                    %
+                  </p>
+                  <p className="text-sm text-gray-600">Average Score</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-purple-600">{enrolledSeries.length}</p>
+                  <p className="text-sm text-gray-600">Enrolled Series</p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

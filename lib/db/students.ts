@@ -160,8 +160,8 @@ export async function getUserEnrollments(
       return enrollment;
     });
 
-    // Cache for 2 minutes (enrollments change more frequently)
-    cache.set(cacheKey, enrollments, 2 * 60 * 1000);
+    // Cache for 5 minutes (balance between freshness and performance)
+    cache.set(cacheKey, enrollments, 5 * 60 * 1000);
     console.log("[Students DB] User enrollments loaded:", enrollments.length);
     return enrollments;
   } catch (error) {

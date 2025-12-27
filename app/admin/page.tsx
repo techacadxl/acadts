@@ -57,6 +57,29 @@ export default function AdminHome() {
           <p className="text-sm text-gray-600">Group tests into series</p>
         </button>
       </div>
+
+      <div className="mt-8 space-y-4">
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Quick Setup</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Add pre-generated questions to test the app. Choose from demo questions or standard questions with +4/-1 marking.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => router.push("/admin/add-demo-questions")}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all"
+            >
+              Add Demo Questions
+            </button>
+            <button
+              onClick={() => router.push("/admin/add-questions")}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-all"
+            >
+              Add 180 Standard Questions (+4/-1)
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

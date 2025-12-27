@@ -1,11 +1,15 @@
 // app/admin/tests/page.tsx
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
 import { listTests, deleteTest } from "@/lib/db/tests";
+import { cache } from "@/lib/utils/cache";
+import Pagination from "@/components/Pagination";
+import { TableSkeleton } from "@/components/LoadingSkeleton";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import type { Test } from "@/lib/types/test";
 
 export default function AdminTestsPage() {
@@ -19,6 +23,10 @@ export default function AdminTestsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const fetchTests = useCallback(async () => {
     console.log("[AdminTestsPage] Fetching tests");
@@ -26,6 +34,8 @@ export default function AdminTestsPage() {
     setError(null);
 
     try {
+      // Invalidate cache to ensure fresh data
+      cache.invalidatePattern("^tests:");
       const data = await listTests();
       console.log("[AdminTestsPage] Tests loaded:", {
         count: data.length,
@@ -106,22 +116,49 @@ export default function AdminTestsPage() {
     [router]
   );
 
-  const filteredTests = tests.filter((test) =>
-    test.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (test.description && test.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredTests = useMemo(() => {
+    return tests.filter((test) =>
+      test.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (test.description && test.description.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }, [tests, searchQuery]);
+
+  // Paginated tests
+  const paginatedTests = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredTests.slice(startIndex, endIndex);
+  }, [filteredTests, currentPage, pageSize]);
+
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredTests.length / pageSize);
+  }, [filteredTests.length, pageSize]);
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  const handleViewReport = useCallback(
+    (id: string) => {
+      router.push(`/admin/tests/${id}/report`);
+    },
+    [router]
   );
 
   const handleMenuClick = useCallback(
-    (id: string, action: "view" | "delete") => {
+    (id: string, action: "view" | "delete" | "report") => {
       if (action === "view") {
         handleView(id);
       } else if (action === "delete") {
         handleDelete(id);
+      } else if (action === "report") {
+        handleViewReport(id);
       }
       setOpenMenuId(null);
       setMenuPosition(null);
     },
-    [handleView, handleDelete]
+    [handleView, handleDelete, handleViewReport]
   );
 
   const handleToggleMenu = useCallback((e: React.MouseEvent<HTMLButtonElement>, id: string) => {
@@ -159,25 +196,32 @@ export default function AdminTestsPage() {
   // ---------- Render ----------
 
   if (authLoading || profileLoading) {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="p-4 text-gray-600">Checking admin access...</p>
-      </main>
-    );
+    return <LoadingSpinner fullScreen text="Checking admin access..." />;
   }
 
   if (!user || role !== "admin") {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="p-4 text-gray-600">Redirecting...</p>
-      </main>
-    );
+    return <LoadingSpinner fullScreen text="Redirecting..." />;
   }
 
   if (loading) {
     return (
-      <div className="p-8 bg-gray-50 min-h-screen flex items-center justify-center">
-        <p className="text-gray-600">Loading tests...</p>
+      <div className="pt-16 md:pt-8 p-4 md:p-8 bg-gray-50 min-h-screen">
+        <div className="max-w-7xl mx-auto">
+          {/* Header Skeleton */}
+          <div className="mb-6">
+            <div className="h-8 w-32 bg-gray-200 rounded animate-pulse mb-2"></div>
+            <div className="h-4 w-64 bg-gray-200 rounded animate-pulse"></div>
+          </div>
+          
+          {/* Search and Button Skeleton */}
+          <div className="mb-6 flex items-center gap-4">
+            <div className="h-10 flex-1 max-w-md bg-gray-200 rounded animate-pulse"></div>
+            <div className="h-10 w-32 bg-gray-200 rounded animate-pulse"></div>
+          </div>
+          
+          {/* Table Skeleton */}
+          <TableSkeleton rows={8} cols={5} />
+        </div>
       </div>
     );
   }
@@ -256,7 +300,7 @@ export default function AdminTestsPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredTests.map((test) => (
+              {paginatedTests.map((test) => (
                 <tr key={test.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">{test.title}</div>
@@ -296,6 +340,18 @@ export default function AdminTestsPage() {
         </div>
       )}
 
+      {/* Pagination */}
+      {filteredTests.length > 0 && totalPages > 1 && (
+        <div className="mt-4">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            isLoading={loading}
+          />
+        </div>
+      )}
+
       {/* Dropdown Menu - Rendered outside table */}
       {openMenuId && menuPosition && (
         <div
@@ -312,6 +368,12 @@ export default function AdminTestsPage() {
               className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors"
             >
               View
+            </button>
+            <button
+              onClick={() => handleMenuClick(openMenuId, "report")}
+              className="block w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 cursor-pointer transition-colors"
+            >
+              View Report
             </button>
             <button
               onClick={() => handleMenuClick(openMenuId, "delete")}

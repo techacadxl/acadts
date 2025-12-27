@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
 import { listQuestions, deleteQuestion, type ListQuestionsParams } from "@/lib/db/questions";
+import { cache, cacheKeys } from "@/lib/utils/cache";
+import Pagination from "@/components/Pagination";
+import { TableSkeleton } from "@/components/LoadingSkeleton";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import type { Question, QuestionType, DifficultyLevel } from "@/lib/types/question";
 import {
   getSubjects,
@@ -34,6 +38,11 @@ export default function AdminQuestionsPage() {
   const [filterType, setFilterType] = useState<QuestionType | "">("");
   const [filterDifficulty, setFilterDifficulty] = useState<DifficultyLevel | "">("");
   const [searchCustomId, setSearchCustomId] = useState("");
+  const [searchKeywords, setSearchKeywords] = useState(""); // New keyword search
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   // Load subjects data for filters
   const subjects = getSubjects();
@@ -57,7 +66,12 @@ export default function AdminQuestionsPage() {
       if (filterSubtopic) filterParams.subtopic = filterSubtopic;
       if (filterType) filterParams.type = filterType;
       if (filterDifficulty) filterParams.difficulty = filterDifficulty;
-
+      
+      // Invalidate cache to ensure fresh data
+      cache.invalidatePattern("^questions:");
+      
+      // Don't set limit - fetch all questions for admin page
+      // This will fetch all questions matching the filters
       const data = await listQuestions(filterParams);
       console.log("[AdminQuestionsPage] Questions loaded:", {
         count: data.length,
@@ -88,6 +102,7 @@ export default function AdminQuestionsPage() {
     }
 
     // Fetch questions when auth is ready or when filters change
+    // Invalidate cache to ensure fresh data
     fetchQuestions();
   }, [authLoading, profileLoading, user, role, router, fetchQuestions]);
 
@@ -95,17 +110,53 @@ export default function AdminQuestionsPage() {
     router.push("/admin/questions/new");
   }, [router]);
 
-  // Filter questions by custom ID (client-side filtering)
+  // Filter questions by custom ID and keywords (client-side filtering)
   const filteredQuestions = useMemo(() => {
-    if (!searchCustomId.trim()) {
-      return allQuestions;
+    let filtered = allQuestions;
+    
+    // Filter by custom ID
+    if (searchCustomId.trim()) {
+      const searchLower = searchCustomId.toLowerCase().trim();
+      filtered = filtered.filter((q) => {
+        const customIdLower = (q.customId || "").toLowerCase();
+        return customIdLower.includes(searchLower);
+      });
     }
-    const searchLower = searchCustomId.toLowerCase().trim();
-    return allQuestions.filter((q) => {
-      const customIdLower = (q.customId || "").toLowerCase();
-      return customIdLower.includes(searchLower);
-    });
-  }, [allQuestions, searchCustomId]);
+    
+    // Filter by keywords (question text, statement, options)
+    if (searchKeywords.trim()) {
+      const keywordsLower = searchKeywords.toLowerCase().trim();
+      const keywordTerms = keywordsLower.split(/\s+/).filter(term => term.length > 0);
+      
+      filtered = filtered.filter((q) => {
+        const questionText = (q.statement || "").toLowerCase();
+        const optionsText = (q.options || []).join(" ").toLowerCase();
+        const explanationText = (q.explanation || "").toLowerCase();
+        const combinedText = `${questionText} ${optionsText} ${explanationText}`;
+        
+        // All keywords must be present
+        return keywordTerms.every(term => combinedText.includes(term));
+      });
+    }
+    
+    return filtered;
+  }, [allQuestions, searchCustomId, searchKeywords]);
+
+  // Paginated questions
+  const paginatedQuestions = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredQuestions.slice(startIndex, endIndex);
+  }, [filteredQuestions, currentPage, pageSize]);
+
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredQuestions.length / pageSize);
+  }, [filteredQuestions.length, pageSize]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterSubjectName, filterChapterName, filterTopicName, filterSubtopic, filterType, filterDifficulty, searchCustomId, searchKeywords]);
 
   // Reset dependent filters when parent changes
   useEffect(() => {
@@ -158,6 +209,7 @@ export default function AdminQuestionsPage() {
 
   const handleClearFilters = useCallback(() => {
     setSearchCustomId("");
+    setSearchKeywords("");
     setFilterSubjectId("");
     setFilterSubjectName("");
     setFilterChapterId("");
@@ -172,6 +224,7 @@ export default function AdminQuestionsPage() {
   const hasActiveFilters = useMemo(() => {
     return !!(
       searchCustomId.trim() ||
+      searchKeywords.trim() ||
       filterSubjectName ||
       filterChapterName ||
       filterTopicName ||
@@ -179,7 +232,7 @@ export default function AdminQuestionsPage() {
       filterType ||
       filterDifficulty
     );
-  }, [searchCustomId, filterSubjectName, filterChapterName, filterTopicName, filterSubtopic, filterType, filterDifficulty]);
+  }, [searchCustomId, searchKeywords, filterSubjectName, filterChapterName, filterTopicName, filterSubtopic, filterType, filterDifficulty]);
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -296,6 +349,20 @@ export default function AdminQuestionsPage() {
 
           {/* Filter Panel */}
           <div className="space-y-4">
+            {/* Search by Keywords */}
+            <div>
+              <label className="block mb-1 text-xs font-medium text-gray-700">
+                Search by Keywords (Question Text)
+              </label>
+              <input
+                type="text"
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                value={searchKeywords}
+                onChange={(e) => setSearchKeywords(e.target.value)}
+                placeholder="Search in question text, options, explanation..."
+              />
+            </div>
+            
             {/* Custom ID Search */}
             <div>
               <label className="block mb-1 text-xs font-medium text-gray-700">
@@ -427,14 +494,32 @@ export default function AdminQuestionsPage() {
                 </div>
               </div>
 
-            {/* Results Count */}
-            <div className="mt-4 pt-4 border-t border-gray-200 text-sm text-gray-600">
-              Showing {filteredQuestions.length} of {allQuestions.length} question{allQuestions.length !== 1 ? 's' : ''}
-              {hasActiveFilters && (
-                <span className="ml-2 text-gray-500">
-                  (filtered)
-                </span>
-              )}
+            {/* Results Count and Page Size */}
+            <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                Showing {paginatedQuestions.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} - {Math.min(currentPage * pageSize, filteredQuestions.length)} of {filteredQuestions.length} question{filteredQuestions.length !== 1 ? 's' : ''}
+                {hasActiveFilters && (
+                  <span className="ml-2 text-gray-500">
+                    (filtered from {allQuestions.length} total)
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Items per page:</label>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -502,7 +587,7 @@ export default function AdminQuestionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredQuestions.map((q) => (
+                {paginatedQuestions.map((q) => (
                   <tr
                     key={q.id}
                     className="border-b last:border-b-0 border-gray-100 hover:bg-gray-50 transition-colors"
@@ -583,6 +668,18 @@ export default function AdminQuestionsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {filteredQuestions.length > 0 && totalPages > 1 && (
+          <div className="mt-4">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              isLoading={loading}
+            />
           </div>
         )}
       </div>

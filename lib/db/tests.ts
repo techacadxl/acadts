@@ -10,10 +10,14 @@ import {
   updateDoc,
   deleteDoc,
   serverTimestamp,
+  limit,
+  startAfter,
   type DocumentSnapshot,
   type QueryDocumentSnapshot,
+  type QueryConstraint,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
+import { cache, cacheKeys } from "@/lib/utils/cache";
 import type {
   Test,
   TestDoc,
@@ -241,6 +245,14 @@ export async function getTestById(id: string): Promise<Test | null> {
 export async function listTests(): Promise<Test[]> {
   console.log("[Tests DB] listTests called");
 
+  // Check cache first
+  const cacheKey = cacheKeys.tests({});
+  const cached = cache.get<Test[]>(cacheKey);
+  if (cached) {
+    console.log("[Tests DB] Tests loaded from cache");
+    return cached;
+  }
+
   try {
     const qRef = query(
       testsCollectionRef(),
@@ -252,8 +264,71 @@ export async function listTests(): Promise<Test[]> {
       mapTestDoc(docSnap)
     );
 
+    // Cache for 5 minutes
+    cache.set(cacheKey, tests, 5 * 60 * 1000);
+
     console.log("[Tests DB] listTests loaded count:", tests.length);
     return tests;
+  } catch (error) {
+    const dbError =
+      error instanceof Error
+        ? error
+        : new Error("Failed to list tests from Firestore");
+    console.error("[Tests DB] Error listing tests:", dbError);
+    throw dbError;
+  }
+}
+
+/**
+ * List tests with pagination support
+ */
+export interface PaginatedTestsResult {
+  tests: Test[];
+  lastDoc: QueryDocumentSnapshot | null;
+  hasMore: boolean;
+  total?: number;
+}
+
+export async function listTestsPaginated(
+  page: number = 1,
+  pageSize: number = 20
+): Promise<PaginatedTestsResult> {
+  console.log("[Tests DB] listTestsPaginated called", { page, pageSize });
+
+  const cacheKey = cacheKeys.tests({ page, pageSize });
+  const cached = cache.get<PaginatedTestsResult>(cacheKey);
+  if (cached) {
+    console.log("[Tests DB] Tests loaded from cache");
+    return cached;
+  }
+
+  try {
+    const constraints: QueryConstraint[] = [
+      orderBy("createdAt", "desc"),
+      limit(pageSize + 1), // Fetch one extra to check if there's more
+    ];
+
+    const qRef = query(testsCollectionRef(), ...constraints);
+    const snapshot = await getDocs(qRef);
+    const docs = snapshot.docs;
+
+    const hasMore = docs.length > pageSize;
+    const testsToReturn = hasMore ? docs.slice(0, pageSize) : docs;
+    const lastDoc = testsToReturn.length > 0 ? testsToReturn[testsToReturn.length - 1] : null;
+
+    const tests: Test[] = testsToReturn.map((docSnap) => mapTestDoc(docSnap));
+
+    const result: PaginatedTestsResult = {
+      tests,
+      lastDoc,
+      hasMore,
+    };
+
+    // Cache for 5 minutes
+    cache.set(cacheKey, result, 5 * 60 * 1000);
+
+    console.log("[Tests DB] listTestsPaginated loaded count:", tests.length, "hasMore:", hasMore);
+    return result;
   } catch (error) {
     const dbError =
       error instanceof Error

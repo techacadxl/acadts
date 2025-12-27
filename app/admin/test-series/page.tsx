@@ -1,11 +1,18 @@
 // app/admin/test-series/page.tsx
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
 import { listTestSeries, deleteTestSeries, toggleTestSeriesPublishStatus } from "@/lib/db/testSeries";
+import { getTestSeriesEnrollments } from "@/lib/db/students";
+import { getTestById } from "@/lib/db/tests";
+import { getTestResultsByTestId } from "@/lib/db/testResults";
+import { cache } from "@/lib/utils/cache";
+import Pagination from "@/components/Pagination";
+import { TableSkeleton } from "@/components/LoadingSkeleton";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import type { TestSeries } from "@/lib/types/testSeries";
 
 export default function AdminTestSeriesPage() {
@@ -13,6 +20,8 @@ export default function AdminTestSeriesPage() {
   const { user, loading: authLoading } = useAuth();
   const { role, loading: profileLoading } = useUserProfile();
   const [testSeries, setTestSeries] = useState<TestSeries[]>([]);
+  const [enrollmentCounts, setEnrollmentCounts] = useState<Map<string, number>>(new Map());
+  const [performanceData, setPerformanceData] = useState<Map<string, { avgScore: number; totalAttempts: number }>>(new Map());
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -20,6 +29,10 @@ export default function AdminTestSeriesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const fetchTestSeries = useCallback(async () => {
     console.log("[AdminTestSeriesPage] Fetching test series");
@@ -27,11 +40,59 @@ export default function AdminTestSeriesPage() {
     setError(null);
 
     try {
+      // Invalidate cache to ensure fresh data
+      cache.invalidatePattern("^testSeries:");
       const data = await listTestSeries();
       console.log("[AdminTestSeriesPage] Test series loaded:", {
         count: data.length,
       });
       setTestSeries(data);
+
+      // Load enrollment counts and performance data
+      const enrollmentMap = new Map<string, number>();
+      const performanceMap = new Map<string, { avgScore: number; totalAttempts: number }>();
+
+      await Promise.all(
+        data.map(async (series) => {
+          try {
+            // Get enrollment count
+            const enrollments = await getTestSeriesEnrollments(series.id);
+            enrollmentMap.set(series.id, enrollments.length);
+
+            // Calculate performance from all tests in series
+            if (series.testIds && series.testIds.length > 0) {
+              let totalScore = 0;
+              let totalAttempts = 0;
+              let testCount = 0;
+
+              for (const testId of series.testIds) {
+                const results = await getTestResultsByTestId(testId);
+                if (results.length > 0) {
+                  const avgScore = results.reduce(
+                    (sum, r) => sum + (r.totalMarksObtained / r.totalMarksPossible) * 100,
+                    0
+                  ) / results.length;
+                  totalScore += avgScore;
+                  totalAttempts += results.length;
+                  testCount += 1;
+                }
+              }
+
+              if (testCount > 0) {
+                performanceMap.set(series.id, {
+                  avgScore: totalScore / testCount,
+                  totalAttempts,
+                });
+              }
+            }
+          } catch (err) {
+            console.error(`[AdminTestSeriesPage] Error loading data for series ${series.id}:`, err);
+          }
+        })
+      );
+
+      setEnrollmentCounts(enrollmentMap);
+      setPerformanceData(performanceMap);
     } catch (err) {
       console.error("[AdminTestSeriesPage] Error fetching test series:", err);
       setError("Failed to load test series. Please try again.");
@@ -114,9 +175,27 @@ export default function AdminTestSeriesPage() {
     [router]
   );
 
-  const filteredTestSeries = testSeries.filter((series) =>
-    series.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTestSeries = useMemo(() => {
+    return testSeries.filter((series) =>
+      series.title.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [testSeries, searchQuery]);
+
+  // Paginated test series
+  const paginatedTestSeries = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredTestSeries.slice(startIndex, endIndex);
+  }, [filteredTestSeries, currentPage, pageSize]);
+
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredTestSeries.length / pageSize);
+  }, [filteredTestSeries.length, pageSize]);
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   const handleTogglePublish = useCallback(
     async (id: string) => {
@@ -208,25 +287,32 @@ export default function AdminTestSeriesPage() {
   // ---------- Render ----------
 
   if (authLoading || profileLoading) {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="p-4 text-gray-600">Checking admin access...</p>
-      </main>
-    );
+    return <LoadingSpinner fullScreen text="Checking admin access..." />;
   }
 
   if (!user || role !== "admin") {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="p-4 text-gray-600">Redirecting...</p>
-      </main>
-    );
+    return <LoadingSpinner fullScreen text="Redirecting..." />;
   }
 
   if (loading) {
     return (
-      <div className="p-8 bg-gray-50 min-h-screen flex items-center justify-center">
-        <p className="text-gray-600">Loading test series...</p>
+      <div className="pt-16 md:pt-8 p-4 md:p-8 bg-gray-50 min-h-screen">
+        <div className="max-w-7xl mx-auto">
+          {/* Header Skeleton */}
+          <div className="mb-6">
+            <div className="h-8 w-40 bg-gray-200 rounded animate-pulse mb-2"></div>
+            <div className="h-4 w-64 bg-gray-200 rounded animate-pulse"></div>
+          </div>
+          
+          {/* Search and Button Skeleton */}
+          <div className="mb-6 flex items-center gap-4">
+            <div className="h-10 flex-1 max-w-md bg-gray-200 rounded animate-pulse"></div>
+            <div className="h-10 w-36 bg-gray-200 rounded animate-pulse"></div>
+          </div>
+          
+          {/* Table Skeleton */}
+          <TableSkeleton rows={8} cols={8} />
+        </div>
       </div>
     );
   }
@@ -266,6 +352,31 @@ export default function AdminTestSeriesPage() {
         </div>
       )}
 
+      {/* Results Count and Page Size */}
+      {filteredTestSeries.length > 0 && (
+        <div className="mb-4 flex items-center justify-between">
+          <div className="text-sm text-gray-600">
+            Showing {paginatedTestSeries.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} - {Math.min(currentPage * pageSize, filteredTestSeries.length)} of {filteredTestSeries.length} test series
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">Items per page:</label>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       {filteredTestSeries.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
@@ -300,6 +411,15 @@ export default function AdminTestSeriesPage() {
                   Price
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  Enrollments
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  Tests
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  Avg Score
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
@@ -308,7 +428,7 @@ export default function AdminTestSeriesPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredTestSeries.map((series) => (
+              {paginatedTestSeries.map((series) => (
                 <tr key={series.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">{series.title}</div>
@@ -323,6 +443,28 @@ export default function AdminTestSeriesPage() {
                     <div className="text-sm font-medium text-gray-900">
                       ${series.price?.toFixed(2) || "0.00"}
                     </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-600">
+                      {enrollmentCounts.get(series.id) || 0}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-600">
+                      {series.testIds?.length || 0}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {performanceData.has(series.id) ? (
+                      <div className="text-sm font-medium text-gray-900">
+                        {performanceData.get(series.id)!.avgScore.toFixed(1)}%
+                        <span className="text-xs text-gray-500 ml-1">
+                          ({performanceData.get(series.id)!.totalAttempts} attempts)
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-400">—</div>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span
@@ -356,6 +498,18 @@ export default function AdminTestSeriesPage() {
             </tbody>
           </table>
           </div>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {filteredTestSeries.length > 0 && totalPages > 1 && (
+        <div className="mt-4">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            isLoading={loading}
+          />
         </div>
       )}
 

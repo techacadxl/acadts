@@ -10,8 +10,10 @@ import {
   updateDoc,
   deleteDoc,
   serverTimestamp,
+  limit,
   type DocumentSnapshot,
   type QueryDocumentSnapshot,
+  type QueryConstraint,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import type { TestSeries, TestSeriesDoc, TestSeriesInput } from "@/lib/types/testSeries";
@@ -78,18 +80,24 @@ export async function createTestSeries(
   }
 }
 
-export async function getTestSeriesById(id: string): Promise<TestSeries | null> {
-  console.log("[TestSeries DB] getTestSeriesById called with id:", id);
+export async function getTestSeriesById(id: string, bypassCache: boolean = false): Promise<TestSeries | null> {
+  console.log("[TestSeries DB] getTestSeriesById called with id:", id, "bypassCache:", bypassCache);
   if (!id || typeof id !== "string" || id.trim() === "") {
     throw new Error("TestSeries id is required and must be a non-empty string");
   }
 
-  // Check cache first
+  // Check cache first (unless bypassing)
   const cacheKey = cacheKeys.testSeriesById(id);
-  const cached = cache.get<TestSeries>(cacheKey);
-  if (cached) {
-    console.log("[TestSeries DB] TestSeries loaded from cache:", id);
-    return cached;
+  if (!bypassCache) {
+    const cached = cache.get<TestSeries>(cacheKey);
+    if (cached) {
+      console.log("[TestSeries DB] TestSeries loaded from cache:", id);
+      return cached;
+    }
+  } else {
+    // Invalidate cache if bypassing
+    cache.invalidate(cacheKey);
+    console.log("[TestSeries DB] Cache bypassed for test series:", id);
   }
 
   const testSeriesRef = doc(db, TEST_SERIES_COLLECTION, id);
@@ -100,9 +108,14 @@ export async function getTestSeriesById(id: string): Promise<TestSeries | null> 
       return null;
     }
     const testSeries = mapTestSeriesDoc(snap);
-    // Cache for 10 minutes
-    cache.set(cacheKey, testSeries, 10 * 60 * 1000);
-    console.log("[TestSeries DB] TestSeries loaded:", { id: testSeries.id });
+    console.log("[TestSeries DB] TestSeries loaded from Firestore:", { 
+      id: testSeries.id, 
+      title: testSeries.title,
+      testIds: testSeries.testIds,
+      testIdsLength: testSeries.testIds?.length 
+    });
+    // Cache for 15 minutes (test series change less frequently)
+    cache.set(cacheKey, testSeries, 15 * 60 * 1000);
     return testSeries;
   } catch (error) {
     const dbError =
@@ -116,11 +129,24 @@ export async function getTestSeriesById(id: string): Promise<TestSeries | null> 
 
 export async function listTestSeries(): Promise<TestSeries[]> {
   console.log("[TestSeries DB] listTestSeries called");
+  
+  // Check cache first
+  const cacheKey = cacheKeys.testSeries({});
+  const cached = cache.get<TestSeries[]>(cacheKey);
+  if (cached) {
+    console.log("[TestSeries DB] Test series loaded from cache");
+    return cached;
+  }
+
   try {
     // Try with orderBy first
     const qRef = query(testSeriesCollectionRef(), orderBy("createdAt", "desc"));
     const snapshot = await getDocs(qRef);
     const testSeries: TestSeries[] = snapshot.docs.map((docSnap) => mapTestSeriesDoc(docSnap));
+    
+    // Cache for 5 minutes
+    cache.set(cacheKey, testSeries, 5 * 60 * 1000);
+    
     console.log("[TestSeries DB] listTestSeries loaded count:", testSeries.length);
     return testSeries;
   } catch (error) {
@@ -136,6 +162,10 @@ export async function listTestSeries(): Promise<TestSeries[]> {
           const bTime = b.createdAt?.seconds || 0;
           return bTime - aTime; // Descending order
         });
+        
+        // Cache for 5 minutes
+        cache.set(cacheKey, testSeries, 5 * 60 * 1000);
+        
         console.log("[TestSeries DB] listTestSeries loaded count (fallback):", testSeries.length);
         return testSeries;
       } catch (fallbackError) {
@@ -143,6 +173,66 @@ export async function listTestSeries(): Promise<TestSeries[]> {
         throw fallbackError;
       }
     }
+    const dbError =
+      error instanceof Error
+        ? error
+        : new Error("Failed to list test series from Firestore");
+    console.error("[TestSeries DB] Error listing test series:", dbError);
+    throw dbError;
+  }
+}
+
+/**
+ * List test series with pagination support
+ */
+export interface PaginatedTestSeriesResult {
+  testSeries: TestSeries[];
+  lastDoc: QueryDocumentSnapshot | null;
+  hasMore: boolean;
+  total?: number;
+}
+
+export async function listTestSeriesPaginated(
+  page: number = 1,
+  pageSize: number = 20
+): Promise<PaginatedTestSeriesResult> {
+  console.log("[TestSeries DB] listTestSeriesPaginated called", { page, pageSize });
+
+  const cacheKey = cacheKeys.testSeries({ page, pageSize });
+  const cached = cache.get<PaginatedTestSeriesResult>(cacheKey);
+  if (cached) {
+    console.log("[TestSeries DB] Test series loaded from cache");
+    return cached;
+  }
+
+  try {
+    const constraints: QueryConstraint[] = [
+      orderBy("createdAt", "desc"),
+      limit(pageSize + 1), // Fetch one extra to check if there's more
+    ];
+
+    const qRef = query(testSeriesCollectionRef(), ...constraints);
+    const snapshot = await getDocs(qRef);
+    const docs = snapshot.docs;
+
+    const hasMore = docs.length > pageSize;
+    const testSeriesToReturn = hasMore ? docs.slice(0, pageSize) : docs;
+    const lastDoc = testSeriesToReturn.length > 0 ? testSeriesToReturn[testSeriesToReturn.length - 1] : null;
+
+    const testSeries: TestSeries[] = testSeriesToReturn.map((docSnap) => mapTestSeriesDoc(docSnap));
+
+    const result: PaginatedTestSeriesResult = {
+      testSeries,
+      lastDoc,
+      hasMore,
+    };
+
+    // Cache for 5 minutes
+    cache.set(cacheKey, result, 5 * 60 * 1000);
+
+    console.log("[TestSeries DB] listTestSeriesPaginated loaded count:", testSeries.length, "hasMore:", hasMore);
+    return result;
+  } catch (error) {
     const dbError =
       error instanceof Error
         ? error
@@ -180,6 +270,9 @@ export async function updateTestSeries(
     cache.invalidate(cacheKeys.testSeriesById(id));
     cache.invalidatePattern("^testSeries:");
     cache.invalidate(cacheKeys.publishedTestSeries());
+    // Also invalidate enrollment caches since they include test series data
+    // This ensures students see newly added tests immediately
+    cache.invalidatePattern("^enrollments:");
     console.log("[TestSeries DB] TestSeries updated successfully");
   } catch (error) {
     const dbError =

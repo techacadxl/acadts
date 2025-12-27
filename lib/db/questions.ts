@@ -253,7 +253,10 @@ export async function listQuestionsPaginated(
 ): Promise<PaginatedQuestionsResult> {
   console.log("[Questions DB] listQuestionsPaginated called with params:", params);
 
-  const pageLimit = params.limit || 50; // Default 50 items per page
+  // If no limit specified, fetch all questions (for admin pages)
+  // Otherwise use the specified limit or default to 50 for pagination
+  const usePagination = params.limit !== undefined;
+  const pageLimit = params.limit || 50;
   const cacheKey = cacheKeys.questions(params);
 
   // Check cache (only for first page without pagination cursor)
@@ -288,10 +291,12 @@ export async function listQuestionsPaginated(
       constraints.push(where("type", "==", params.type));
     }
 
-    // Add pagination
-    constraints.push(limit(pageLimit + 1)); // Fetch one extra to check if there's more
-    if (params.lastDoc) {
-      constraints.push(startAfter(params.lastDoc));
+    // Add pagination only if limit is specified
+    if (usePagination) {
+      constraints.push(limit(pageLimit + 1)); // Fetch one extra to check if there's more
+      if (params.lastDoc) {
+        constraints.push(startAfter(params.lastDoc));
+      }
     }
 
     // Only use orderBy when there are no filters to avoid composite index requirement
@@ -307,11 +312,20 @@ export async function listQuestionsPaginated(
 
     const snapshot = await getDocs(qRef);
     const docs = snapshot.docs;
-    const hasMore = docs.length > pageLimit;
     
-    // If we fetched extra, remove it
-    const questionsToReturn = hasMore ? docs.slice(0, pageLimit) : docs;
-    const lastDoc = questionsToReturn.length > 0 ? questionsToReturn[questionsToReturn.length - 1] : null;
+    let hasMore = false;
+    let questionsToReturn = docs;
+    let lastDoc: QueryDocumentSnapshot | null = null;
+    
+    if (usePagination) {
+      hasMore = docs.length > pageLimit;
+      questionsToReturn = hasMore ? docs.slice(0, pageLimit) : docs;
+      lastDoc = questionsToReturn.length > 0 ? questionsToReturn[questionsToReturn.length - 1] : null;
+    } else {
+      // No pagination - return all questions
+      lastDoc = docs.length > 0 ? docs[docs.length - 1] : null;
+      hasMore = false;
+    }
 
     let questions: Question[] = questionsToReturn.map((docSnap) =>
       mapQuestionDoc(docSnap)
@@ -334,7 +348,7 @@ export async function listQuestionsPaginated(
 
     // Cache first page only (no lastDoc)
     if (!params.lastDoc) {
-      cache.set(cacheKey, result, 5 * 60 * 1000); // 5 minutes
+      cache.set(cacheKey, result, 10 * 60 * 1000); // 10 minutes (increased for better performance)
     }
 
     console.log("[Questions DB] listQuestionsPaginated loaded count:", questions.length, "hasMore:", hasMore);

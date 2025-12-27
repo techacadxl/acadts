@@ -49,7 +49,8 @@ export default function TestSeriesDetailsPage() {
       setLoading(true);
       console.log("[TestSeriesDetailsPage] Loading test series:", seriesId);
       try {
-        const series = await getTestSeriesById(seriesId);
+        // Bypass cache to get the latest test series data with newly added tests
+        const series = await getTestSeriesById(seriesId, true);
         if (!series) {
           console.error("[TestSeriesDetailsPage] Test series not found:", seriesId);
           alert("Test series not found. Redirecting to dashboard.");
@@ -73,13 +74,36 @@ export default function TestSeriesDetailsPage() {
         setTestAttemptMap(attemptMap);
 
         // Load test details
+        console.log("[TestSeriesDetailsPage] Test series testIds:", {
+          testIds: series.testIds,
+          length: series.testIds?.length,
+        });
+        
         if (series.testIds && series.testIds.length > 0) {
+          console.log("[TestSeriesDetailsPage] Loading tests for IDs:", series.testIds);
           const testPromises = series.testIds.map(async (testId) => {
-            const test = await getTestById(testId);
-            return test;
+            try {
+              const test = await getTestById(testId);
+              if (!test) {
+                console.warn("[TestSeriesDetailsPage] Test not found for ID:", testId);
+              }
+              return test;
+            } catch (err) {
+              console.error("[TestSeriesDetailsPage] Error loading test:", testId, err);
+              return null;
+            }
           });
           const loadedTests = await Promise.all(testPromises);
-          setTests(loadedTests.filter((t): t is Test => t !== null));
+          const validTests = loadedTests.filter((t): t is Test => t !== null);
+          console.log("[TestSeriesDetailsPage] Loaded tests:", {
+            total: loadedTests.length,
+            valid: validTests.length,
+            testTitles: validTests.map(t => t.title),
+          });
+          setTests(validTests);
+        } else {
+          console.warn("[TestSeriesDetailsPage] No testIds in series or empty array");
+          setTests([]);
         }
       } catch (error) {
         console.error("[TestSeriesDetailsPage] Error loading data:", error);

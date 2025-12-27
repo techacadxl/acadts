@@ -69,6 +69,19 @@ export default function TestTakingPage() {
         // Check if user has already attempted this test
         const existingResult = await getUserTestResult(user.uid, testId);
         if (existingResult) {
+          // Clear any saved test state if test was already submitted
+          const storageKey = `test_timer_${testId}_${user.uid}`;
+          const answersKey = `test_answers_${testId}_${user.uid}`;
+          const statusesKey = `test_statuses_${testId}_${user.uid}`;
+          const markedKey = `test_marked_${testId}_${user.uid}`;
+          const currentIndexKey = `test_currentIndex_${testId}_${user.uid}`;
+          
+          localStorage.removeItem(storageKey);
+          localStorage.removeItem(answersKey);
+          localStorage.removeItem(statusesKey);
+          localStorage.removeItem(markedKey);
+          localStorage.removeItem(currentIndexKey);
+          
           setError("You have already attempted this test. Redirecting to results...");
           // Redirect to results page after a short delay
           setTimeout(() => {
@@ -123,16 +136,81 @@ export default function TestTakingPage() {
         }
 
         setQuestions(validQuestions);
-        setCurrentQuestionIndex(0);
         
-        // Record start time
-        startTimeRef.current = new Date();
+        // Restore saved state if available
+        const answersKey = `test_answers_${testId}_${user.uid}`;
+        const statusesKey = `test_statuses_${testId}_${user.uid}`;
+        const markedKey = `test_marked_${testId}_${user.uid}`;
+        const currentIndexKey = `test_currentIndex_${testId}_${user.uid}`;
         
-        const initialStatuses = new Map<number, QuestionStatus>();
-        validQuestions.forEach((_, index) => {
-          initialStatuses.set(index, index === 0 ? "not_answered" : "not_visited");
-        });
-        setQuestionStatuses(initialStatuses);
+        const savedAnswers = localStorage.getItem(answersKey);
+        const savedStatuses = localStorage.getItem(statusesKey);
+        const savedMarked = localStorage.getItem(markedKey);
+        const savedCurrentIndex = localStorage.getItem(currentIndexKey);
+        
+        if (savedAnswers) {
+          try {
+            const parsed = JSON.parse(savedAnswers);
+            const answersMap = new Map<number, number | number[] | string>();
+            Object.entries(parsed).forEach(([key, value]) => {
+              answersMap.set(Number(key), value as number | number[] | string);
+            });
+            setAnswers(answersMap);
+          } catch (e) {
+            console.error("[TestTakingPage] Error parsing saved answers:", e);
+          }
+        }
+        
+        if (savedStatuses) {
+          try {
+            const parsed = JSON.parse(savedStatuses);
+            const statusesMap = new Map<number, QuestionStatus>();
+            Object.entries(parsed).forEach(([key, value]) => {
+              statusesMap.set(Number(key), value as QuestionStatus);
+            });
+            setQuestionStatuses(statusesMap);
+          } catch (e) {
+            console.error("[TestTakingPage] Error parsing saved statuses:", e);
+            // Fallback to initial statuses
+            const initialStatuses = new Map<number, QuestionStatus>();
+            validQuestions.forEach((_, index) => {
+              initialStatuses.set(index, index === 0 ? "not_answered" : "not_visited");
+            });
+            setQuestionStatuses(initialStatuses);
+          }
+        } else {
+          // Initial statuses if no saved state
+          const initialStatuses = new Map<number, QuestionStatus>();
+          validQuestions.forEach((_, index) => {
+            initialStatuses.set(index, index === 0 ? "not_answered" : "not_visited");
+          });
+          setQuestionStatuses(initialStatuses);
+        }
+        
+        if (savedMarked) {
+          try {
+            const parsed = JSON.parse(savedMarked);
+            setMarkedForReview(new Set(parsed.map((n: number) => Number(n))));
+          } catch (e) {
+            console.error("[TestTakingPage] Error parsing saved marked:", e);
+          }
+        }
+        
+        if (savedCurrentIndex) {
+          try {
+            const index = Number(savedCurrentIndex);
+            if (index >= 0 && index < validQuestions.length) {
+              setCurrentQuestionIndex(index);
+            } else {
+              setCurrentQuestionIndex(0);
+            }
+          } catch (e) {
+            console.error("[TestTakingPage] Error parsing saved current index:", e);
+            setCurrentQuestionIndex(0);
+          }
+        } else {
+          setCurrentQuestionIndex(0);
+        }
       } catch (err) {
         console.error("[TestTakingPage] Error loading test:", err);
         setError(err instanceof Error ? err.message : "Failed to load test.");
@@ -170,21 +248,37 @@ export default function TestTakingPage() {
     setQuestionStatuses((prev) => {
       const newMap = new Map(prev);
       newMap.set(index, status);
+      
+      // Save to localStorage
+      if (testId && user?.uid) {
+        const statusesKey = `test_statuses_${testId}_${user.uid}`;
+        const serialized = Object.fromEntries(newMap);
+        localStorage.setItem(statusesKey, JSON.stringify(serialized));
+      }
+      
       return newMap;
     });
-  }, []);
+  }, [testId, user?.uid]);
 
   // Handle answer selection
   const handleAnswerSelect = useCallback((index: number, answer: number | number[] | string) => {
     setAnswers((prev) => {
       const newMap = new Map(prev);
       newMap.set(index, answer);
+      
+      // Save to localStorage
+      if (testId && user?.uid) {
+        const answersKey = `test_answers_${testId}_${user.uid}`;
+        const serialized = Object.fromEntries(newMap);
+        localStorage.setItem(answersKey, JSON.stringify(serialized));
+      }
+      
       return newMap;
     });
     
     const isMarked = markedForReview.has(index);
     updateQuestionStatus(index, isMarked ? "answered_and_marked" : "answered");
-  }, [markedForReview, updateQuestionStatus]);
+  }, [markedForReview, updateQuestionStatus, testId, user?.uid]);
 
   // Handle mark for review
   const handleMarkForReview = useCallback(() => {
@@ -204,15 +298,30 @@ export default function TestTakingPage() {
           answers.has(currentQuestionIndex) ? "answered_and_marked" : "marked_for_review"
         );
       }
+      
+      // Save to localStorage
+      if (testId && user?.uid) {
+        const markedKey = `test_marked_${testId}_${user.uid}`;
+        localStorage.setItem(markedKey, JSON.stringify(Array.from(newSet)));
+      }
+      
       return newSet;
     });
-  }, [currentQuestionIndex, getQuestionStatus, answers, updateQuestionStatus]);
+  }, [currentQuestionIndex, getQuestionStatus, answers, updateQuestionStatus, testId, user?.uid]);
 
   // Handle clear response
   const handleClearResponse = useCallback(() => {
     setAnswers((prev) => {
       const newMap = new Map(prev);
       newMap.delete(currentQuestionIndex);
+      
+      // Save to localStorage
+      if (testId && user?.uid) {
+        const answersKey = `test_answers_${testId}_${user.uid}`;
+        const serialized = Object.fromEntries(newMap);
+        localStorage.setItem(answersKey, JSON.stringify(serialized));
+      }
+      
       return newMap;
     });
     
@@ -221,18 +330,26 @@ export default function TestTakingPage() {
       currentQuestionIndex,
       isMarked ? "marked_for_review" : "not_answered"
     );
-  }, [currentQuestionIndex, markedForReview, updateQuestionStatus]);
+  }, [currentQuestionIndex, markedForReview, updateQuestionStatus, testId, user?.uid]);
 
   const handleNext = useCallback(() => {
     if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-      const status = getQuestionStatus(currentQuestionIndex + 1);
+      const newIndex = currentQuestionIndex + 1;
+      setCurrentQuestionIndex(newIndex);
+      
+      // Save current index to localStorage
+      if (testId && user?.uid) {
+        const currentIndexKey = `test_currentIndex_${testId}_${user.uid}`;
+        localStorage.setItem(currentIndexKey, String(newIndex));
+      }
+      
+      const status = getQuestionStatus(newIndex);
       if (status === "not_visited") {
-        updateQuestionStatus(currentQuestionIndex + 1, "not_answered");
+        updateQuestionStatus(newIndex, "not_answered");
       }
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
-  }, [currentQuestionIndex, questions.length, getQuestionStatus, updateQuestionStatus]);
+  }, [currentQuestionIndex, questions.length, getQuestionStatus, updateQuestionStatus, testId, user?.uid]);
 
   const handleSaveAndNext = useCallback(() => {
     const hasAnswer = answers.has(currentQuestionIndex);
@@ -257,6 +374,13 @@ export default function TestTakingPage() {
   const handleGoToQuestion = useCallback((index: number) => {
     if (index >= 0 && index < questions.length) {
       setCurrentQuestionIndex(index);
+      
+      // Save current index to localStorage
+      if (testId && user?.uid) {
+        const currentIndexKey = `test_currentIndex_${testId}_${user.uid}`;
+        localStorage.setItem(currentIndexKey, String(index));
+      }
+      
       const status = getQuestionStatus(index);
       if (status === "not_visited") {
         updateQuestionStatus(index, "not_answered");
@@ -265,7 +389,7 @@ export default function TestTakingPage() {
       setIsSidebarOpen(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
-  }, [questions.length, getQuestionStatus, updateQuestionStatus]);
+  }, [questions.length, getQuestionStatus, updateQuestionStatus, testId, user?.uid]);
 
   const handleGoToSection = useCallback((sectionId: string) => {
     const firstQuestionInSection = questions.findIndex(
@@ -346,6 +470,21 @@ export default function TestTakingPage() {
 
       const resultId = await createTestResult(resultInput);
 
+      // Clear saved state after successful submission
+      if (testId && user?.uid) {
+        const storageKey = `test_timer_${testId}_${user.uid}`;
+        const answersKey = `test_answers_${testId}_${user.uid}`;
+        const statusesKey = `test_statuses_${testId}_${user.uid}`;
+        const markedKey = `test_marked_${testId}_${user.uid}`;
+        const currentIndexKey = `test_currentIndex_${testId}_${user.uid}`;
+        
+        localStorage.removeItem(storageKey);
+        localStorage.removeItem(answersKey);
+        localStorage.removeItem(statusesKey);
+        localStorage.removeItem(markedKey);
+        localStorage.removeItem(currentIndexKey);
+      }
+
       // Navigate to results page
       router.push(`/dashboard/tests/${testId}/result/${resultId}`);
     } catch (error) {
@@ -360,15 +499,94 @@ export default function TestTakingPage() {
     handleSubmitTestRef.current = handleSubmitTest;
   }, [handleSubmitTest]);
 
-  // Initialize timer
+  // Initialize timer with persistence
   useEffect(() => {
-    if (test && test.durationMinutes) {
-      const totalSeconds = test.durationMinutes * 60;
-      setRemainingTime(totalSeconds);
+    if (test && test.durationMinutes && testId) {
+      const storageKey = `test_timer_${testId}_${user?.uid}`;
+      const answersKey = `test_answers_${testId}_${user?.uid}`;
+      const statusesKey = `test_statuses_${testId}_${user?.uid}`;
+      const markedKey = `test_marked_${testId}_${user?.uid}`;
+      const currentIndexKey = `test_currentIndex_${testId}_${user?.uid}`;
+
+      // Check if there's a saved timer state
+      const savedTimerState = localStorage.getItem(storageKey);
+      let initialRemainingTime: number;
+      let savedStartTime: Date | null = null;
+
+      if (savedTimerState) {
+        try {
+          const parsed = JSON.parse(savedTimerState);
+          savedStartTime = new Date(parsed.startTime);
+          const elapsedSeconds = Math.floor((new Date().getTime() - savedStartTime.getTime()) / 1000);
+          const totalSeconds = test.durationMinutes * 60;
+          initialRemainingTime = Math.max(0, totalSeconds - elapsedSeconds);
+          
+          // If timer expired, clear saved state
+          if (initialRemainingTime <= 0) {
+            localStorage.removeItem(storageKey);
+            localStorage.removeItem(answersKey);
+            localStorage.removeItem(statusesKey);
+            localStorage.removeItem(markedKey);
+            localStorage.removeItem(currentIndexKey);
+            initialRemainingTime = totalSeconds;
+            startTimeRef.current = new Date();
+          } else {
+            // Restore start time
+            startTimeRef.current = savedStartTime;
+          }
+        } catch (e) {
+          console.error("[TestTakingPage] Error parsing saved timer state:", e);
+          initialRemainingTime = test.durationMinutes * 60;
+          startTimeRef.current = new Date();
+        }
+      } else {
+        // First time starting the test
+        initialRemainingTime = test.durationMinutes * 60;
+        startTimeRef.current = new Date();
+      }
+
+      setRemainingTime(initialRemainingTime);
+
+      // Save timer state to localStorage
+      if (startTimeRef.current) {
+        localStorage.setItem(storageKey, JSON.stringify({
+          startTime: startTimeRef.current.toISOString(),
+          durationMinutes: test.durationMinutes,
+        }));
+      }
 
       timerIntervalRef.current = setInterval(() => {
         setRemainingTime((prev) => {
-          if (prev <= 1) {
+          const newTime = prev - 1;
+          
+          // Update localStorage with current remaining time
+          if (startTimeRef.current) {
+            const elapsedSeconds = Math.floor((new Date().getTime() - startTimeRef.current.getTime()) / 1000);
+            const totalSeconds = test.durationMinutes * 60;
+            const calculatedRemaining = Math.max(0, totalSeconds - elapsedSeconds);
+            
+            // Use calculated time for accuracy (handles tab switching, etc.)
+            if (calculatedRemaining <= 0) {
+              if (timerIntervalRef.current) {
+                clearInterval(timerIntervalRef.current);
+              }
+              // Auto-submit when time runs out (skip confirmation)
+              if (handleSubmitTestRef.current) {
+                handleSubmitTestRef.current(true);
+              }
+              // Clear saved state
+              localStorage.removeItem(storageKey);
+              localStorage.removeItem(answersKey);
+              localStorage.removeItem(statusesKey);
+              localStorage.removeItem(markedKey);
+              localStorage.removeItem(currentIndexKey);
+              return 0;
+            }
+            
+            return calculatedRemaining;
+          }
+          
+          if (newTime <= 0) {
             if (timerIntervalRef.current) {
               clearInterval(timerIntervalRef.current);
             }
@@ -376,9 +594,15 @@ export default function TestTakingPage() {
             if (handleSubmitTestRef.current) {
               handleSubmitTestRef.current(true);
             }
+            // Clear saved state
+            localStorage.removeItem(storageKey);
+            localStorage.removeItem(answersKey);
+            localStorage.removeItem(statusesKey);
+            localStorage.removeItem(markedKey);
+            localStorage.removeItem(currentIndexKey);
             return 0;
           }
-          return prev - 1;
+          return newTime;
         });
       }, 1000);
 
@@ -388,7 +612,7 @@ export default function TestTakingPage() {
         }
       };
     }
-  }, [test]);
+  }, [test, testId, user?.uid]);
 
   // Get status counts
   const statusCounts = useMemo(() => {
