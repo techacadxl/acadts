@@ -163,6 +163,61 @@
   font-weight: bold;
 }
 
+/* LaTeX/Math rendering styles */
+.katex {
+  font-size: 1.1em;
+  line-height: 1.2;
+}
+
+.katex-display {
+  margin: 1em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+}
+
+.katex-display > .katex {
+  display: inline-block;
+  text-align: left;
+}
+
+/* Ensure LaTeX doesn't break layout */
+.katex {
+  white-space: nowrap;
+}
+
+.katex .base {
+  display: inline-block;
+}
+
+/* LaTeX placeholders (before rendering) */
+.latex-placeholder {
+  font-family: 'Courier New', monospace;
+  background-color: #f0f0f0;
+  padding: 2px 4px;
+  border-radius: 3px;
+  color: #666;
+  display: inline-block;
+}
+
+.latex-error {
+  font-family: 'Courier New', monospace;
+  background-color: #fee;
+  padding: 2px 4px;
+  border-radius: 3px;
+  color: #c00;
+  display: inline-block;
+}
+
+/* Ensure proper spacing around LaTeX */
+.prose .katex-display {
+  margin: 1.5em 0;
+}
+
+.prose .katex {
+  margin: 0 0.2em;
+}
+
 /* Question content specific styles */
 .question-content {
   line-height: 1.6;

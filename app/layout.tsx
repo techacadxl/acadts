@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
+import LatexProvider from "@/components/LatexProvider";
 
 export const metadata: Metadata = {
   title: "My App",
@@ -13,7 +14,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body suppressHydrationWarning>
         <AuthProvider>
-          {children}
+          <LatexProvider>
+            {children}
+          </LatexProvider>
         </AuthProvider>
       </body>
     </html>

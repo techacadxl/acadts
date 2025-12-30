@@ -672,12 +672,9 @@ export default function ViewTestPage() {
                               : "Numerical"}
                           </span>
                         </div>
-                        <div
-                          className="text-sm text-gray-700 line-clamp-3 question-content"
-                          dangerouslySetInnerHTML={{
-                            __html: question.text,
-                          }}
-                        />
+                        <div className="text-sm text-gray-700 line-clamp-3 question-content">
+                          <RichTextRenderer content={question.text} />
+                        </div>
                       </div>
                       <div className="ml-4 flex flex-col items-end gap-2">
                         <div className="text-right">
