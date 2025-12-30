@@ -5,18 +5,12 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
-import { listQuestions, deleteQuestion, type ListQuestionsParams } from "@/lib/db/questions";
-import { cache, cacheKeys } from "@/lib/utils/cache";
+import { listQuestions, deleteQuestion } from "@/lib/db/questions";
+import { cache } from "@/lib/utils/cache";
 import Pagination from "@/components/Pagination";
 import { TableSkeleton } from "@/components/LoadingSkeleton";
 import LoadingSpinner from "@/components/LoadingSpinner";
-import type { Question, QuestionType, DifficultyLevel } from "@/lib/types/question";
-import {
-  getSubjects,
-  getChaptersBySubject,
-  getTopicsByChapter,
-  getSubtopicsByTopic,
-} from "@/lib/utils/subjectData";
+import type { Question } from "@/lib/types/question";
 
 export default function AdminQuestionsPage() {
   const router = useRouter();
@@ -27,30 +21,12 @@ export default function AdminQuestionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Filter states (using IDs for cascading, names for database queries)
-  const [filterSubjectId, setFilterSubjectId] = useState("");
-  const [filterSubjectName, setFilterSubjectName] = useState("");
-  const [filterChapterId, setFilterChapterId] = useState("");
-  const [filterChapterName, setFilterChapterName] = useState("");
-  const [filterTopicId, setFilterTopicId] = useState("");
-  const [filterTopicName, setFilterTopicName] = useState("");
-  const [filterSubtopic, setFilterSubtopic] = useState("");
-  const [filterType, setFilterType] = useState<QuestionType | "">("");
-  const [filterDifficulty, setFilterDifficulty] = useState<DifficultyLevel | "">("");
-  const [searchCustomId, setSearchCustomId] = useState("");
-  const [searchKeywords, setSearchKeywords] = useState(""); // New keyword search
+  // Single unified search state
+  const [searchQuery, setSearchQuery] = useState("");
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-
-  // Load subjects data for filters
-  const subjects = getSubjects();
-  const filterChapters = filterSubjectId ? getChaptersBySubject(filterSubjectId) : [];
-  const filterTopics = filterSubjectId && filterChapterId ? getTopicsByChapter(filterSubjectId, filterChapterId) : [];
-  const filterSubtopics = filterSubjectId && filterChapterId && filterTopicId
-    ? getSubtopicsByTopic(filterSubjectId, filterChapterId, filterTopicId)
-    : [];
 
   const fetchQuestions = useCallback(async () => {
     console.log("[AdminQuestionsPage] Fetching questions");
@@ -58,24 +34,14 @@ export default function AdminQuestionsPage() {
     setError(null);
 
     try {
-      // Build filter params (use names for database queries)
-      const filterParams: ListQuestionsParams = {};
-      if (filterSubjectName) filterParams.subject = filterSubjectName;
-      if (filterChapterName) filterParams.chapter = filterChapterName;
-      if (filterTopicName) filterParams.topic = filterTopicName;
-      if (filterSubtopic) filterParams.subtopic = filterSubtopic;
-      if (filterType) filterParams.type = filterType;
-      if (filterDifficulty) filterParams.difficulty = filterDifficulty;
-      
+      // Fetch all questions - filtering will be done client-side
       // Invalidate cache to ensure fresh data
       cache.invalidatePattern("^questions:");
       
-      // Don't set limit - fetch all questions for admin page
-      // This will fetch all questions matching the filters
-      const data = await listQuestions(filterParams);
+      // Fetch all questions without filters
+      const data = await listQuestions({});
       console.log("[AdminQuestionsPage] Questions loaded:", {
         count: data.length,
-        filters: filterParams,
       });
       setAllQuestions(data);
     } catch (err) {
@@ -84,7 +50,7 @@ export default function AdminQuestionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterSubjectName, filterChapterName, filterTopicName, filterSubtopic, filterType, filterDifficulty]);
+  }, []);
 
   useEffect(() => {
     if (authLoading || profileLoading) return;
@@ -110,37 +76,56 @@ export default function AdminQuestionsPage() {
     router.push("/admin/questions/new");
   }, [router]);
 
-  // Filter questions by custom ID and keywords (client-side filtering)
+  // Filter questions by unified search query (client-side filtering)
   const filteredQuestions = useMemo(() => {
-    let filtered = allQuestions;
-    
-    // Filter by custom ID
-    if (searchCustomId.trim()) {
-      const searchLower = searchCustomId.toLowerCase().trim();
-      filtered = filtered.filter((q) => {
-        const customIdLower = (q.customId || "").toLowerCase();
-        return customIdLower.includes(searchLower);
-      });
+    if (!searchQuery.trim()) {
+      return allQuestions;
     }
+
+    const searchLower = searchQuery.toLowerCase().trim();
+    const searchTerms = searchLower.split(/\s+/).filter(term => term.length > 0);
     
-    // Filter by keywords (question text, statement, options)
-    if (searchKeywords.trim()) {
-      const keywordsLower = searchKeywords.toLowerCase().trim();
-      const keywordTerms = keywordsLower.split(/\s+/).filter(term => term.length > 0);
+    return allQuestions.filter((q) => {
+      // Search in subject
+      const subjectMatch = (q.subject || "").toLowerCase().includes(searchLower);
       
-      filtered = filtered.filter((q) => {
-        const questionText = (q.statement || "").toLowerCase();
-        const optionsText = (q.options || []).join(" ").toLowerCase();
-        const explanationText = (q.explanation || "").toLowerCase();
-        const combinedText = `${questionText} ${optionsText} ${explanationText}`;
-        
-        // All keywords must be present
-        return keywordTerms.every(term => combinedText.includes(term));
-      });
-    }
-    
-    return filtered;
-  }, [allQuestions, searchCustomId, searchKeywords]);
+      // Search in chapter
+      const chapterMatch = (q.chapter || "").toLowerCase().includes(searchLower);
+      
+      // Search in topic
+      const topicMatch = (q.topic || "").toLowerCase().includes(searchLower);
+      
+      // Search in subtopic
+      const subtopicMatch = (q.subtopic || "").toLowerCase().includes(searchLower);
+      
+      // Search in custom ID
+      const customIdMatch = (q.customId || "").toLowerCase().includes(searchLower);
+      
+      // Search in tags (any tag contains the search term)
+      const tagsMatch = (q.tags || []).some(tag => 
+        tag.toLowerCase().includes(searchLower)
+      );
+      
+      // Search in question text, options, and explanation
+      const questionText = (q.text || "").toLowerCase();
+      const optionsText = (q.options || []).join(" ").toLowerCase();
+      const explanationText = (q.explanation || "").toLowerCase();
+      const contentMatch = searchTerms.every(term => 
+        questionText.includes(term) || 
+        optionsText.includes(term) || 
+        explanationText.includes(term)
+      );
+      
+      // Match if any field contains the search query
+      return subjectMatch || 
+             chapterMatch || 
+             topicMatch || 
+             subtopicMatch || 
+             customIdMatch || 
+             tagsMatch || 
+             contentMatch;
+    });
+  }, [allQuestions, searchQuery]);
 
   // Paginated questions
   const paginatedQuestions = useMemo(() => {
@@ -153,86 +138,18 @@ export default function AdminQuestionsPage() {
     return Math.ceil(filteredQuestions.length / pageSize);
   }, [filteredQuestions.length, pageSize]);
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 when search query changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterSubjectName, filterChapterName, filterTopicName, filterSubtopic, filterType, filterDifficulty, searchCustomId, searchKeywords]);
-
-  // Reset dependent filters when parent changes
-  useEffect(() => {
-    if (!filterSubjectId) {
-      setFilterChapterId("");
-      setFilterChapterName("");
-      setFilterTopicId("");
-      setFilterTopicName("");
-      setFilterSubtopic("");
-    }
-  }, [filterSubjectId]);
-
-  useEffect(() => {
-    if (!filterChapterId) {
-      setFilterTopicId("");
-      setFilterTopicName("");
-      setFilterSubtopic("");
-    }
-  }, [filterChapterId]);
-
-  useEffect(() => {
-    if (!filterTopicId) {
-      setFilterSubtopic("");
-    }
-  }, [filterTopicId]);
-
-  // Handle subject change
-  const handleFilterSubjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedId = e.target.value;
-    setFilterSubjectId(selectedId);
-    const selectedSubject = subjects.find(s => s.id === selectedId);
-    setFilterSubjectName(selectedSubject?.name || "");
-  };
-
-  // Handle chapter change
-  const handleFilterChapterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedId = e.target.value;
-    setFilterChapterId(selectedId);
-    const selectedChapter = filterChapters.find(c => c.id === selectedId);
-    setFilterChapterName(selectedChapter?.name || "");
-  };
-
-  // Handle topic change
-  const handleFilterTopicChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedId = e.target.value;
-    setFilterTopicId(selectedId);
-    const selectedTopic = filterTopics.find(t => t.id === selectedId);
-    setFilterTopicName(selectedTopic?.name || "");
-  };
+  }, [searchQuery]);
 
   const handleClearFilters = useCallback(() => {
-    setSearchCustomId("");
-    setSearchKeywords("");
-    setFilterSubjectId("");
-    setFilterSubjectName("");
-    setFilterChapterId("");
-    setFilterChapterName("");
-    setFilterTopicId("");
-    setFilterTopicName("");
-    setFilterSubtopic("");
-    setFilterType("");
-    setFilterDifficulty("");
+    setSearchQuery("");
   }, []);
 
   const hasActiveFilters = useMemo(() => {
-    return !!(
-      searchCustomId.trim() ||
-      searchKeywords.trim() ||
-      filterSubjectName ||
-      filterChapterName ||
-      filterTopicName ||
-      filterSubtopic ||
-      filterType ||
-      filterDifficulty
-    );
-  }, [searchCustomId, searchKeywords, filterSubjectName, filterChapterName, filterTopicName, filterSubtopic, filterType, filterDifficulty]);
+    return !!searchQuery.trim();
+  }, [searchQuery]);
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -349,150 +266,22 @@ export default function AdminQuestionsPage() {
 
           {/* Filter Panel */}
           <div className="space-y-4">
-            {/* Search by Keywords */}
+            {/* Unified Search */}
             <div>
               <label className="block mb-1 text-xs font-medium text-gray-700">
-                Search by Keywords (Question Text)
+                Search Questions
               </label>
               <input
                 type="text"
                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-                value={searchKeywords}
-                onChange={(e) => setSearchKeywords(e.target.value)}
-                placeholder="Search in question text, options, explanation..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by subject, chapter, topic, subtopic, custom ID, tags, or question content..."
               />
+              <p className="mt-1 text-xs text-gray-500">
+                Searches across all fields: subject, chapter, topic, subtopic, custom ID, tags, and question content.
+              </p>
             </div>
-            
-            {/* Custom ID Search */}
-            <div>
-              <label className="block mb-1 text-xs font-medium text-gray-700">
-                Search by Custom ID
-              </label>
-              <input
-                type="text"
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-                value={searchCustomId}
-                onChange={(e) => setSearchCustomId(e.target.value)}
-                placeholder="e.g. PHY-001, MATH-2024-01"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Subject Filter */}
-                <div>
-                  <label className="block mb-1 text-xs font-medium text-gray-700">
-                    Subject
-                  </label>
-                  <select
-                    value={filterSubjectId}
-                    onChange={handleFilterSubjectChange}
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-                  >
-                    <option value="">All Subjects</option>
-                    {subjects.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Chapter Filter */}
-                <div>
-                  <label className="block mb-1 text-xs font-medium text-gray-700">
-                    Chapter
-                  </label>
-                  <select
-                    value={filterChapterId}
-                    onChange={handleFilterChapterChange}
-                    disabled={!filterSubjectId}
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="">{filterSubjectId ? "All Chapters" : "Select Subject First"}</option>
-                    {filterChapters.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Topic Filter */}
-                <div>
-                  <label className="block mb-1 text-xs font-medium text-gray-700">
-                    Topic
-                  </label>
-                  <select
-                    value={filterTopicId}
-                    onChange={handleFilterTopicChange}
-                    disabled={!filterChapterId}
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="">{filterChapterId ? "All Topics" : "Select Chapter First"}</option>
-                    {filterTopics.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Subtopic Filter */}
-                <div>
-                  <label className="block mb-1 text-xs font-medium text-gray-700">
-                    Subtopic
-                  </label>
-                  <select
-                    value={filterSubtopic}
-                    onChange={(e) => setFilterSubtopic(e.target.value)}
-                    disabled={!filterTopicId}
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="">{filterTopicId ? "All Subtopics" : "Select Topic First"}</option>
-                    {filterSubtopics.map((st) => (
-                      <option key={st} value={st}>
-                        {st}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Type Filter */}
-                <div>
-                  <label className="block mb-1 text-xs font-medium text-gray-700">
-                    Type
-                  </label>
-                  <select
-                    value={filterType}
-                    onChange={(e) => setFilterType(e.target.value as QuestionType | "")}
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-                  >
-                    <option value="">All Types</option>
-                    <option value="mcq_single">MCQ (Single)</option>
-                    <option value="mcq_multiple">MCQ (Multiple)</option>
-                    <option value="numerical">Numerical</option>
-                  </select>
-                </div>
-
-                {/* Difficulty Filter */}
-                <div>
-                  <label className="block mb-1 text-xs font-medium text-gray-700">
-                    Difficulty
-                  </label>
-                  <select
-                    value={filterDifficulty}
-                    onChange={(e) => setFilterDifficulty(e.target.value as DifficultyLevel | "")}
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-                  >
-                    <option value="">All Difficulties</option>
-                    <option value="easy">Easy</option>
-                    <option value="medium">Medium</option>
-                    <option value="hard">Hard</option>
-                  </select>
-                </div>
-              </div>
 
             {/* Results Count and Page Size */}
             <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">

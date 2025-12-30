@@ -9,15 +9,6 @@ import type { QuestionType, DifficultyLevel, QuestionInput } from "@/lib/types/q
 import { sanitizeInput } from "@/lib/utils/validation";
 import RichTextEditor from "@/components/RichTextEditor";
 import { buildImageFolderPath } from "@/lib/utils/imageStorage";
-import {
-  getSubjects,
-  getChaptersBySubject,
-  getTopicsByChapter,
-  getSubtopicsByTopic,
-  type Subject,
-  type Chapter,
-  type Topic,
-} from "@/lib/utils/subjectData";
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "mcq_single", label: "MCQ (Single Correct)" },
@@ -39,21 +30,12 @@ export default function EditQuestionPage() {
   const { role, loading: profileLoading } = useUserProfile();
 
   const [type, setType] = useState<QuestionType>("mcq_single");
-  const [subjectId, setSubjectId] = useState("");
   const [subjectName, setSubjectName] = useState("");
-  const [chapterId, setChapterId] = useState("");
   const [chapterName, setChapterName] = useState("");
-  const [topicId, setTopicId] = useState("");
   const [topicName, setTopicName] = useState("");
   const [subtopic, setSubtopic] = useState("");
   const [customId, setCustomId] = useState("");
   const [tagsInput, setTagsInput] = useState("");
-
-  // Load subjects data
-  const subjects = getSubjects();
-  const chapters = subjectId ? getChaptersBySubject(subjectId) : [];
-  const topics = subjectId && chapterId ? getTopicsByChapter(subjectId, chapterId) : [];
-  const subtopics = subjectId && chapterId && topicId ? getSubtopicsByTopic(subjectId, chapterId, topicId) : [];
   const [text, setText] = useState(""); // TipTap HTML
   const [options, setOptions] = useState<string[]>(["", "", "", ""]);
   const [correctOptions, setCorrectOptions] = useState<number[]>([]);
@@ -86,33 +68,9 @@ export default function EditQuestionPage() {
 
         // Populate form with existing data
         setType(question.type);
-        
-        // Find IDs from names for dropdowns
-        const foundSubject = subjects.find(s => s.name === question.subject);
-        if (foundSubject) {
-          setSubjectId(foundSubject.id);
-          setSubjectName(foundSubject.name);
-          
-          if (question.chapter) {
-            const foundChapter = foundSubject.chapters.find(c => c.name === question.chapter);
-            if (foundChapter) {
-              setChapterId(foundChapter.id);
-              setChapterName(foundChapter.name);
-              
-              if (question.topic) {
-                const foundTopic = foundChapter.topics.find(t => t.name === question.topic);
-                if (foundTopic) {
-                  setTopicId(foundTopic.id);
-                  setTopicName(foundTopic.name);
-                }
-              }
-            }
-          }
-        } else {
-          // Fallback for old questions without matching subject
-          setSubjectName(question.subject);
-        }
-        
+        setSubjectName(question.subject || "");
+        setChapterName(question.chapter || "");
+        setTopicName(question.topic || "");
         setSubtopic(question.subtopic || "");
         setCustomId(question.customId || "");
         setTagsInput(question.tags.join(", "));
@@ -185,54 +143,6 @@ export default function EditQuestionPage() {
     [type]
   );
 
-  // Reset dependent dropdowns when parent changes
-  useEffect(() => {
-    if (subjectId) {
-      setChapterId("");
-      setChapterName("");
-      setTopicId("");
-      setTopicName("");
-      setSubtopic("");
-    }
-  }, [subjectId]);
-
-  useEffect(() => {
-    if (chapterId) {
-      setTopicId("");
-      setTopicName("");
-      setSubtopic("");
-    }
-  }, [chapterId]);
-
-  useEffect(() => {
-    if (topicId) {
-      setSubtopic("");
-    }
-  }, [topicId]);
-
-  // Handle subject change
-  const handleSubjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedId = e.target.value;
-    setSubjectId(selectedId);
-    const selectedSubject = subjects.find(s => s.id === selectedId);
-    setSubjectName(selectedSubject?.name || "");
-  };
-
-  // Handle chapter change
-  const handleChapterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedId = e.target.value;
-    setChapterId(selectedId);
-    const selectedChapter = chapters.find(c => c.id === selectedId);
-    setChapterName(selectedChapter?.name || "");
-  };
-
-  // Handle topic change
-  const handleTopicChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedId = e.target.value;
-    setTopicId(selectedId);
-    const selectedTopic = topics.find(t => t.id === selectedId);
-    setTopicName(selectedTopic?.name || "");
-  };
 
   const handleSubmit = useCallback(
     async (e: FormEvent<HTMLFormElement>) => {
@@ -252,17 +162,17 @@ export default function EditQuestionPage() {
       const sanitizedText = text.trim(); // TipTap HTML
       const sanitizedExplanation = explanation.trim() || "";
 
-      if (!subjectId || !sanitizedSubject) {
+      if (!sanitizedSubject) {
         setError("Subject is required.");
         return;
       }
 
-      if (!chapterId || !sanitizedChapter) {
+      if (!sanitizedChapter) {
         setError("Chapter is required.");
         return;
       }
 
-      if (!topicId || !sanitizedTopic) {
+      if (!sanitizedTopic) {
         setError("Topic is required.");
         return;
       }
@@ -398,11 +308,8 @@ export default function EditQuestionPage() {
     [
       user,
       questionId,
-      subjectId,
       subjectName,
-      chapterId,
       chapterName,
-      topicId,
       topicName,
       subtopic,
       customId,
@@ -499,19 +406,14 @@ export default function EditQuestionPage() {
                 <label className="block mb-1 text-sm font-medium text-gray-700">
                   Subject <span className="text-red-500">*</span>
                 </label>
-                <select
+                <input
+                  type="text"
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-                  value={subjectId}
-                  onChange={handleSubjectChange}
+                  value={subjectName}
+                  onChange={(e) => setSubjectName(e.target.value)}
+                  placeholder="e.g. Physics, Mathematics"
                   required
-                >
-                  <option value="">Select Subject</option>
-                  {subjects.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div>
@@ -539,40 +441,28 @@ export default function EditQuestionPage() {
                 <label className="block mb-1 text-sm font-medium text-gray-700">
                   Chapter <span className="text-red-500">*</span>
                 </label>
-                <select
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  value={chapterId}
-                  onChange={handleChapterChange}
-                  disabled={!subjectId}
+                <input
+                  type="text"
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                  value={chapterName}
+                  onChange={(e) => setChapterName(e.target.value)}
+                  placeholder="e.g. Mechanics, Algebra"
                   required
-                >
-                  <option value="">{subjectId ? "Select Chapter" : "Select Subject First"}</option>
-                  {chapters.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div>
                 <label className="block mb-1 text-sm font-medium text-gray-700">
                   Topic <span className="text-red-500">*</span>
                 </label>
-                <select
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  value={topicId}
-                  onChange={handleTopicChange}
-                  disabled={!chapterId}
+                <input
+                  type="text"
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                  value={topicName}
+                  onChange={(e) => setTopicName(e.target.value)}
+                  placeholder="e.g. Kinematics, Linear Equations"
                   required
-                >
-                  <option value="">{chapterId ? "Select Topic" : "Select Chapter First"}</option>
-                  {topics.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
             </div>
 
@@ -581,20 +471,14 @@ export default function EditQuestionPage() {
               <label className="block mb-1 text-sm font-medium text-gray-700">
                 Subtopic <span className="text-red-500">*</span>
               </label>
-              <select
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+              <input
+                type="text"
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
                 value={subtopic}
                 onChange={(e) => setSubtopic(e.target.value)}
-                disabled={!topicId}
+                placeholder="e.g. 1D Motion, Quadratic Equations"
                 required
-              >
-                <option value="">{topicId ? "Select Subtopic" : "Select Topic First"}</option>
-                {subtopics.map((st) => (
-                  <option key={st} value={st}>
-                    {st}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             {/* Custom ID */}
