@@ -3,6 +3,8 @@
  * Processes LaTeX code in text and HTML content and converts it to rendered HTML
  */
 
+import { sanitizeLatex } from './latexSanitizer';
+
 // Load KaTeX CSS and JS dynamically
 let katexLoaded = false;
 let katexLoadPromise: Promise<void> | null = null;
@@ -160,6 +162,43 @@ function processPlainTextLatex(content: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, " ");
+
+  // Sanitize LaTeX content from Mathpix before processing
+  // Extract LaTeX blocks, sanitize them, then put them back
+  // Process display math first ($$ and \[)
+  const displayMathPattern = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\])/g;
+  const displayMathBlocks: Array<{ placeholder: string; sanitized: string }> = [];
+  let displayIndex = 0;
+  
+  processed = processed.replace(displayMathPattern, (match) => {
+    const placeholder = `__DISPLAY_MATH_${displayIndex}__`;
+    const sanitized = sanitizeLatex(match, { subject: 'auto', strict: true });
+    displayMathBlocks.push({ placeholder, sanitized });
+    displayIndex++;
+    return placeholder;
+  });
+
+  // Process inline math ($ and \()
+  const inlineMathPattern = /(\$[^$\n]+?\$|\\\([^)]+?\\\))/g;
+  const inlineMathBlocks: Array<{ placeholder: string; sanitized: string }> = [];
+  let inlineIndex = 0;
+  
+  processed = processed.replace(inlineMathPattern, (match) => {
+    const placeholder = `__INLINE_MATH_${inlineIndex}__`;
+    const sanitized = sanitizeLatex(match, { subject: 'auto', strict: true });
+    inlineMathBlocks.push({ placeholder, sanitized });
+    inlineIndex++;
+    return placeholder;
+  });
+
+  // Restore sanitized LaTeX blocks (display first, then inline)
+  displayMathBlocks.forEach((block) => {
+    processed = processed.replace(block.placeholder, block.sanitized);
+  });
+  
+  inlineMathBlocks.forEach((block) => {
+    processed = processed.replace(block.placeholder, block.sanitized);
+  });
 
   // Process LaTeX environments like \begin{enumerate}...\end{enumerate}
   // These need special handling as they're not in \[...\] blocks

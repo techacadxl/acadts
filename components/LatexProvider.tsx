@@ -18,3 +18,5 @@ export default function LatexProvider({ children }: { children: React.ReactNode 
   return <>{children}</>;
 }
 
+
+
